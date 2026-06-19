@@ -31,7 +31,7 @@ export interface PlayRecord {
   completedAt: number;
 }
 
-export type PageType = "select" | "play" | "tutorial" | "scorebook" | "calibration";
+export type PageType = "select" | "play" | "tutorial" | "scorebook" | "settings" | "calibration";
 
 export interface ChartNote {
   id: number;

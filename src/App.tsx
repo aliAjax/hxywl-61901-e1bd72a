@@ -5,6 +5,7 @@ import GamePlay from "./GamePlay";
 import Tutorial from "./Tutorial";
 import ScoreBook from "./ScoreBook";
 import Calibration from "./Calibration";
+import Settings from "./Settings";
 import type { Song, PageType } from "./types";
 import { songs, isTutorialCompleted } from "./songs";
 
@@ -22,6 +23,7 @@ function App() {
   );
   const [initChecked, setInitChecked] = useState(false);
   const [scorebookSongId, setScorebookSongId] = useState<string | null>(null);
+  const [calibrationReturnPage, setCalibrationReturnPage] = useState<PageType>("select");
 
   const selectedSong = songs.find((s) => s.id === selectedSongId) || songs[0];
 
@@ -68,11 +70,29 @@ function App() {
   }
 
   function handleOpenCalibration() {
+    setCalibrationReturnPage("select");
     setPage("calibration");
   }
 
   function handleBackFromCalibration() {
+    setPage(calibrationReturnPage);
+  }
+
+  function handleOpenSettings() {
+    setPage("settings");
+  }
+
+  function handleBackFromSettings() {
     setPage("select");
+  }
+
+  function handleCalibrationFromSettings() {
+    setCalibrationReturnPage("settings");
+    setPage("calibration");
+  }
+
+  function handleTutorialFromSettings() {
+    setPage("tutorial");
   }
 
   if (!initChecked) {
@@ -109,7 +129,7 @@ function App() {
           onStartPlay={handleStartPlay}
           onStartTutorial={handleStartTutorial}
           onOpenScorebook={handleOpenScorebook}
-          onOpenCalibration={handleOpenCalibration}
+          onOpenSettings={handleOpenSettings}
         />
       )}
 
@@ -125,6 +145,14 @@ function App() {
         <ScoreBook
           initialSongId={scorebookSongId}
           onBack={handleBackFromScorebook}
+        />
+      )}
+
+      {page === "settings" && (
+        <Settings
+          onBack={handleBackFromSettings}
+          onOpenCalibration={handleCalibrationFromSettings}
+          onStartTutorial={handleTutorialFromSettings}
         />
       )}
 

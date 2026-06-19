@@ -14,7 +14,7 @@ interface SongSelectProps {
   onStartPlay: (song: Song) => void;
   onStartTutorial: () => void;
   onOpenScorebook: (songId?: string | null) => void;
-  onOpenCalibration: () => void;
+  onOpenSettings: () => void;
 }
 
 export default function SongSelect({
@@ -23,7 +23,7 @@ export default function SongSelect({
   onStartPlay,
   onStartTutorial,
   onOpenScorebook,
-  onOpenCalibration,
+  onOpenSettings,
 }: SongSelectProps) {
   const [previewingSongId, setPreviewingSongId] = useState<string | null>(null);
   const [previewStep, setPreviewStep] = useState(-1);
@@ -129,10 +129,10 @@ export default function SongSelect({
             📋 成绩册
           </button>
           <button
-            className="calibration-entry-btn"
-            onClick={onOpenCalibration}
+            className="settings-entry-btn"
+            onClick={onOpenSettings}
           >
-            🎯 校准
+            ⚙️ 设置
           </button>
         </div>
       </header>
