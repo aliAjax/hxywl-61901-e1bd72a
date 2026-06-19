@@ -655,6 +655,24 @@ button {
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
 }
 
+.overlay-back-btn {
+  display: block;
+  margin: 0 auto 16px;
+  padding: 8px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 10px;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 150ms ease;
+}
+
+.overlay-back-btn:hover {
+  background: rgba(148, 163, 184, 0.1);
+  color: #f8fafc;
+}
+
 .start-content h2,
 .result-content h2 {
   margin: 0 0 8px;

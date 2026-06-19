@@ -361,6 +361,9 @@ export default function GamePlay({ song, onBack }: GamePlayProps) {
       {!playing && !finished && (
         <div className="start-overlay">
           <div className="start-content">
+            <button className="overlay-back-btn" onClick={onBack}>
+              ← 返回选曲
+            </button>
             <h2>{song.title}</h2>
             <p>{song.artist}</p>
             <div className="start-info">
