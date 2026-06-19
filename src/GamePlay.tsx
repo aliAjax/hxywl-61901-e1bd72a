@@ -8,6 +8,7 @@ import {
   getSongBestScore,
   saveSongBestScore,
   savePlayRecord,
+  getCalibrationOffset,
 } from "./songs";
 import { ChartPlayer, type SpawnedNote, HIT_ZONE_RELATIVE, type NoteVisualUpdate } from "./chartPlayer";
 import { getChartForSong } from "./charts";
@@ -693,6 +694,15 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
                 : score >= 50000
                 ? "✓ 良好"
                 : "继续加油！"}
+            </div>
+            <div className="result-calibration">
+              <span className="result-calibration-label">延迟校准</span>
+              <strong className="result-calibration-value">
+                {(() => {
+                  const off = getCalibrationOffset();
+                  return off === 0 ? "0 ms" : off > 0 ? `+${off} ms` : `${off} ms`;
+                })()}
+              </strong>
             </div>
             <div className="result-stats">
               <div className="result-summary-section">

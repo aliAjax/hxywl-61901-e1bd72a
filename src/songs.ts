@@ -153,6 +153,20 @@ export function savePlayRecord(record: PlayRecord): void {
   localStorage.setItem(RECORDS_KEY, JSON.stringify(trimmed));
 }
 
+const CALIBRATION_KEY = "rhythm-calibration-offset";
+
+export function getCalibrationOffset(): number {
+  return Number(localStorage.getItem(CALIBRATION_KEY) || 0);
+}
+
+export function saveCalibrationOffset(offsetMs: number): void {
+  localStorage.setItem(CALIBRATION_KEY, String(Math.round(offsetMs)));
+}
+
+export function resetCalibrationOffset(): void {
+  localStorage.removeItem(CALIBRATION_KEY);
+}
+
 export const TUTORIAL_KEY = "rhythm-tutorial-completed";
 
 export function isTutorialCompleted(): boolean {

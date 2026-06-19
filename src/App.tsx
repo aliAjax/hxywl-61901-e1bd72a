@@ -4,6 +4,7 @@ import SongSelect from "./SongSelect";
 import GamePlay from "./GamePlay";
 import Tutorial from "./Tutorial";
 import ScoreBook from "./ScoreBook";
+import Calibration from "./Calibration";
 import type { Song, PageType } from "./types";
 import { songs, isTutorialCompleted } from "./songs";
 
@@ -66,6 +67,14 @@ function App() {
     setPage("select");
   }
 
+  function handleOpenCalibration() {
+    setPage("calibration");
+  }
+
+  function handleBackFromCalibration() {
+    setPage("select");
+  }
+
   if (!initChecked) {
     return (
       <main className="game-shell">
@@ -100,6 +109,7 @@ function App() {
           onStartPlay={handleStartPlay}
           onStartTutorial={handleStartTutorial}
           onOpenScorebook={handleOpenScorebook}
+          onOpenCalibration={handleOpenCalibration}
         />
       )}
 
@@ -115,6 +125,12 @@ function App() {
         <ScoreBook
           initialSongId={scorebookSongId}
           onBack={handleBackFromScorebook}
+        />
+      )}
+
+      {page === "calibration" && (
+        <Calibration
+          onBack={handleBackFromCalibration}
         />
       )}
     </main>
