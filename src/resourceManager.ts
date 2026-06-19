@@ -636,10 +636,19 @@ class ResourceManager {
       warnings.push("迁移旧数据时出现异常，已跳过");
     }
 
+    const preservedScores = safeParseJSON<Record<string, number>>(
+      localStorage.getItem(STORAGE_KEYS.BEST_SCORES),
+      {}
+    );
+    const preservedRecords = safeParseJSON<PlayRecord[]>(
+      localStorage.getItem(STORAGE_KEYS.PLAY_RECORDS),
+      []
+    );
+
     const integrity = this.checkIntegrity();
 
     if (integrity.versionMismatch) {
-      warnings.push("资源版本不匹配，正在重新初始化默认资源");
+      warnings.push("资源版本不匹配，正在重建歌曲和谱面（保留用户分数）");
       this.writeDefaultSongs();
       this.writeDefaultCharts();
       recoveredFromCorruption = true;
@@ -670,21 +679,40 @@ class ResourceManager {
       }
     }
 
-    if (!localStorage.getItem(STORAGE_KEYS.BEST_SCORES)) {
-      this.writeDefaultBestScores();
-    } else {
-      const scores = safeParseJSON<Record<string, number>>(
-        localStorage.getItem(STORAGE_KEYS.BEST_SCORES),
-        {}
-      );
-      for (const song of defaultSongs) {
-        if (typeof scores[song.id] !== "number") {
-          scores[song.id] = 0;
+    const validSongIds = new Set(defaultSongs.map((s) => s.id));
+    const mergedScores: Record<string, number> = {};
+    for (const song of defaultSongs) {
+      const preserved = preservedScores[song.id];
+      mergedScores[song.id] =
+        typeof preserved === "number" && !Number.isNaN(preserved) ? preserved : 0;
+    }
+    for (const key of Object.keys(preservedScores)) {
+      if (!mergedScores.hasOwnProperty(key) && validSongIds.has(key)) {
+        const val = preservedScores[key];
+        if (typeof val === "number" && !Number.isNaN(val)) {
+          mergedScores[key] = val;
         }
       }
-      localStorage.setItem(STORAGE_KEYS.BEST_SCORES, JSON.stringify(scores));
-      this.memoryCache.bestScores = scores;
     }
+    localStorage.setItem(STORAGE_KEYS.BEST_SCORES, JSON.stringify(mergedScores));
+    this.memoryCache.bestScores = mergedScores;
+
+    const validRecords: PlayRecord[] = [];
+    for (const r of preservedRecords) {
+      if (isValidPlayRecord(r) && validSongIds.has(r.songId)) {
+        validRecords.push({
+          ...r,
+          tapPerfectCount: r.tapPerfectCount ?? 0,
+          tapGoodCount: r.tapGoodCount ?? 0,
+          tapMissCount: r.tapMissCount ?? 0,
+          longPerfectCount: r.longPerfectCount ?? 0,
+          longGoodCount: r.longGoodCount ?? 0,
+          longMissCount: r.longMissCount ?? 0,
+        });
+      }
+    }
+    localStorage.setItem(STORAGE_KEYS.PLAY_RECORDS, JSON.stringify(validRecords));
+    this.memoryCache.playRecords = validRecords;
 
     if (this.cleanOrphanedScores()) {
       cleanedStaleData = true;

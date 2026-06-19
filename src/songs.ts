@@ -20,7 +20,29 @@ export interface TutorialStep {
   forceMiss?: boolean;
 }
 
-export { defaultSongs as songs, tutorialSong, difficultyLabels, difficultyColors, formatDuration };
+export const songs = new Proxy<Song[]>([] as Song[], {
+  get(_target, prop, _receiver) {
+    const realSongs = resourceManager.getSongs();
+    if (prop === "length") return realSongs.length;
+    if (typeof prop === "string" && /^\d+$/.test(prop)) {
+      return realSongs[parseInt(prop, 10)];
+    }
+    if (prop === Symbol.iterator) {
+      return realSongs[Symbol.iterator].bind(realSongs);
+    }
+    const value = (realSongs as unknown as Record<string | symbol, unknown>)[prop];
+    if (typeof value === "function") {
+      return value.bind(realSongs);
+    }
+    return value;
+  },
+  has(_target, prop) {
+    const realSongs = resourceManager.getSongs();
+    return prop in realSongs;
+  },
+});
+
+export { tutorialSong, difficultyLabels, difficultyColors, formatDuration };
 
 export function getSongBestScore(songId: string): number {
   return resourceManager.getBestScore(songId);
