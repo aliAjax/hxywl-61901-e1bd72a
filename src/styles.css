@@ -520,7 +520,7 @@ button {
 
 .hit-zone {
   position: absolute;
-  bottom: 40px;
+  bottom: auto;
   left: 8%;
   right: 8%;
   height: 50px;
@@ -1798,10 +1798,10 @@ button {
   }
 
   .hit-zone {
-    bottom: 32px;
+    bottom: auto;
     left: 6%;
     right: 6%;
-    height: 60px;
+    height: 50px;
     border-radius: 14px;
   }
 

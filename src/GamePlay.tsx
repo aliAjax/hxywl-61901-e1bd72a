@@ -9,7 +9,7 @@ import {
   saveSongBestScore,
   savePlayRecord,
 } from "./songs";
-import { ChartPlayer, type SpawnedNote, TRACK_HEIGHT, HIT_ZONE_BOTTOM } from "./chartPlayer";
+import { ChartPlayer, type SpawnedNote, HIT_ZONE_RELATIVE, type NoteVisualUpdate } from "./chartPlayer";
 import { getChartForSong } from "./charts";
 
 interface GamePlayProps {
@@ -33,10 +33,12 @@ function getOrientation(): Orientation {
 
 export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProps) {
   const playerRef = useRef<ChartPlayer | null>(null);
+  const tracksContainerRef = useRef<HTMLDivElement | null>(null);
   const [started, setStarted] = useState(false);
 
   const [activeNotes, setActiveNotes] = useState<Map<number, ActiveNote>>(new Map());
-  const [noteEndYs, setNoteEndYs] = useState<Map<number, number>>(new Map());
+  const [noteProgress, setNoteProgress] = useState<Map<number, number>>(new Map());
+  const [noteEndProgress, setNoteEndProgress] = useState<Map<number, number>>(new Map());
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
@@ -61,20 +63,36 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
   );
   const [savedRecord, setSavedRecord] = useState(false);
   const [orientation, setOrientation] = useState<Orientation>(getOrientation());
+  const [trackHeightPx, setTrackHeightPx] = useState(0);
 
   const bestScore = useMemo(() => getSongBestScore(song.id), [song.id]);
   const finalStatsRef = useRef<GameStats | null>(null);
   const activePointersRef = useRef<Map<number, number>>(new Map());
 
   useEffect(() => {
+    const measure = () => {
+      if (tracksContainerRef.current) {
+        const rect = tracksContainerRef.current.getBoundingClientRect();
+        setTrackHeightPx(rect.height);
+      }
+    };
+    measure();
     const handleResize = () => {
       setOrientation(getOrientation());
+      setTimeout(measure, 10);
     };
     window.addEventListener("resize", handleResize);
     window.addEventListener("orientationchange", handleResize);
+    const ro = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(measure)
+      : null;
+    if (ro && tracksContainerRef.current) {
+      ro.observe(tracksContainerRef.current);
+    }
     return () => {
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("orientationchange", handleResize);
+      if (ro) ro.disconnect();
     };
   }, []);
 
@@ -98,26 +116,32 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
           });
           return next;
         });
+        setNoteProgress((prev) => {
+          const next = new Map(prev);
+          next.set(spawned.id, -0.05);
+          return next;
+        });
         if (spawned.type === "long" && spawned.endTime !== undefined) {
-          setNoteEndYs((prev) => {
+          setNoteEndProgress((prev) => {
             const next = new Map(prev);
-            next.set(spawned.id, -60);
+            next.set(spawned.id, -0.05);
             return next;
           });
         }
       },
-      onNoteUpdate: (id: number, y: number, endY?: number) => {
-        setActiveNotes((prev) => {
-          const existing = prev.get(id);
-          if (!existing) return prev;
+      onNoteUpdate: (update: NoteVisualUpdate) => {
+        const { id, progress, endProgress } = update;
+        setNoteProgress((prev) => {
+          if (!prev.has(id)) return prev;
           const next = new Map(prev);
-          next.set(id, { ...existing, y });
+          next.set(id, progress);
           return next;
         });
-        if (endY !== undefined) {
-          setNoteEndYs((prev) => {
+        if (endProgress !== undefined) {
+          setNoteEndProgress((prev) => {
+            if (!prev.has(id)) return prev;
             const next = new Map(prev);
-            next.set(id, endY);
+            next.set(id, endProgress);
             return next;
           });
         }
@@ -137,7 +161,12 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
           next.delete(id);
           return next;
         });
-        setNoteEndYs((prev) => {
+        setNoteProgress((prev) => {
+          const next = new Map(prev);
+          next.delete(id);
+          return next;
+        });
+        setNoteEndProgress((prev) => {
           const next = new Map(prev);
           next.delete(id);
           return next;
@@ -225,7 +254,8 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
     setPaused(false);
     setElapsed(0);
     setActiveNotes(new Map());
-    setNoteEndYs(new Map());
+    setNoteProgress(new Map());
+    setNoteEndProgress(new Map());
     setScore(0);
     setCombo(0);
     setMaxCombo(0);
@@ -257,21 +287,14 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
     }
   }
 
-  function handleResume() {
-    if (!playerRef.current) return;
-    if (playerRef.current.isPaused()) {
-      playerRef.current.resume();
-      setPaused(false);
-    }
-  }
-
   function handleRestart() {
     setFinished(false);
     setSavedRecord(false);
     setPaused(false);
     setElapsed(0);
     setActiveNotes(new Map());
-    setNoteEndYs(new Map());
+    setNoteProgress(new Map());
+    setNoteEndProgress(new Map());
     setScore(0);
     setCombo(0);
     setMaxCombo(0);
@@ -314,9 +337,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
       return next;
     });
 
-    if (playerRef.current.isPlaying()) {
-      playerRef.current.judgeTrackRelease(track);
-    }
+    playerRef.current.judgeTrackRelease(track);
   }
 
   useEffect(() => {
@@ -399,7 +420,12 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
 
   const isPortrait = orientation === "portrait";
 
-  const hitZoneY = TRACK_HEIGHT - HIT_ZONE_BOTTOM - 25;
+  const H = trackHeightPx || 560;
+  const hitLineY = H * HIT_ZONE_RELATIVE;
+
+  function progressToTop(p: number): number {
+    return p * hitLineY;
+  }
 
   return (
     <div className={`game-play ${isPortrait ? "mobile-portrait" : "mobile-landscape"}`}>
@@ -454,8 +480,8 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
 
       <div className={`play-area ${isPortrait ? "portrait-area" : "landscape-area"}`}>
         <div
+          ref={tracksContainerRef}
           className="tracks-container"
-          style={isPortrait ? { height: "auto", aspectRatio: undefined } : {}}
         >
           {Array.from({ length: TRACK_COUNT }).map((_, trackIdx) => (
             <div
@@ -477,19 +503,22 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
                 .map((note) => {
                   const color1 = TRACK_COLORS[trackIdx];
                   const color2 = TRACK_COLORS[(trackIdx + 1) % TRACK_COLORS.length];
-                  const endY = noteEndYs.get(note.id);
+                  const p = noteProgress.get(note.id) ?? -0.05;
+                  const endP = noteEndProgress.get(note.id);
+                  const noteTop = progressToTop(p);
 
-                  if (note.type === "long" && endY !== undefined) {
-                    const noteTop = Math.min(note.y, endY);
-                    const noteBottom = Math.max(note.y, endY);
-                    const noteHeight = Math.max(28, noteBottom - noteTop);
+                  if (note.type === "long" && endP !== undefined) {
+                    const endTop = progressToTop(endP);
+                    const tailTop = Math.min(noteTop, endTop);
+                    const tailBottom = Math.max(noteTop, endTop);
+                    const tailHeight = Math.max(18, tailBottom - tailTop + 28);
                     return (
                       <div key={note.id}>
                         <div
                           className={`note-long-tail ${note.longHolding ? "holding" : ""}`}
                           style={{
-                            top: noteTop,
-                            height: noteHeight,
+                            top: tailTop,
+                            height: tailHeight,
                             background: `linear-gradient(180deg, ${color1}60, ${color2}80)`,
                             borderColor: color1,
                           }}
@@ -497,7 +526,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
                         <div
                           className="note note-long-head"
                           style={{
-                            top: endY,
+                            top: endTop,
                             background:
                               "linear-gradient(180deg, " + color1 + ", " + color2 + ")",
                             boxShadow: "0 0 20px " + color1 + "80",
@@ -506,7 +535,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
                         <div
                           className="note note-long-start"
                           style={{
-                            top: note.y,
+                            top: noteTop,
                             background:
                               "linear-gradient(180deg, " + color2 + ", " + color1 + ")",
                             boxShadow: "0 0 16px " + color1 + "60",
@@ -522,7 +551,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
                       key={note.id}
                       className="note"
                       style={{
-                        top: note.y,
+                        top: noteTop,
                         background:
                           "linear-gradient(180deg, " + color1 + ", " + color2 + ")",
                         boxShadow: "0 0 20px " + color1 + "80",
@@ -532,7 +561,10 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
                 })}
               <div
                 className="hit-zone"
-                style={{ borderColor: TRACK_COLORS[trackIdx] }}
+                style={{
+                  top: hitLineY - 25,
+                  borderColor: TRACK_COLORS[trackIdx],
+                }}
               >
                 <span className="hit-label">{TRACK_LABELS[trackIdx]}</span>
               </div>
@@ -601,152 +633,154 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
 
       {!started && !finished && (
         <div className="start-overlay">
-          <div className="start-content">
-            <button className="overlay-back-btn" onClick={onBack}>
-              ← 返回选曲
-            </button>
+          <div className="start-card">
+            <div className="cover-colors" style={{
+              background: "linear-gradient(135deg, " + song.coverColor + ", " + song.accentColor + ")",
+            }} />
             <h2>{song.title}</h2>
-            <p>{song.artist}</p>
-            <div className="start-info">
-              <span>BPM: {song.bpm}</span>
-              <span>最高分: {bestScore.toLocaleString()}</span>
+            <div className="meta">
+              <span style={{ backgroundColor: difficultyColors[song.difficulty] }}>
+                {difficultyLabels[song.difficulty]} Lv.{song.difficultyLevel}
+              </span>
+              <span>{song.artist}</span>
+              <span>{formatDuration(song.duration)}</span>
             </div>
-            <div className="chart-info-tag">
-              🎼 已加载谱面 · 共 {totalTapNotes} 点击 + {totalLongNotes} 长按
-            </div>
-            <div className="mobile-hint">
-              📱 点击下方轨道按钮或直接点击轨道游玩
-            </div>
-            <button className="start-game-btn" onClick={handleStart}>
-              开始演奏
+            <p className="start-tip">
+              移动端竖屏推荐玩法：双手握住设备，用拇指点击对应编号按钮。<br />
+              橙色方块（短）点击，彩色长条（长按）按到底再松开。
+            </p>
+            <p className="best-score">
+              最高分：<strong>{bestScore.toLocaleString()}</strong>
+            </p>
+            <p className="start-keys">
+              <strong>触屏</strong>：按下方彩色按钮　|　<strong>键盘</strong>：D / F / J / K
+            </p>
+            <button className="start-btn" onClick={handleStart}>
+              ▶ 开始演奏
             </button>
+            <small className="start-shortcut">按空格键快速开始</small>
           </div>
         </div>
       )}
 
-      {paused && started && !finished && (
+      {paused && !finished && (
         <div className="pause-overlay">
-          <div className="pause-content">
-            <div className="pause-indicator">❚❚</div>
+          <div className="pause-card">
             <h2>已暂停</h2>
-            <p>按空格键或 ESC 继续</p>
-            <div className="pause-stats">
-              <div>
-                <small>当前分数</small>
-                <strong>{score.toLocaleString()}</strong>
-              </div>
-              <div>
-                <small>连击</small>
-                <strong className="combo-num">{combo}</strong>
-              </div>
-            </div>
-            <div className="result-actions">
-              <button
-                className="result-btn primary"
-                onClick={handleResume}
-              >
-                ▶ 继续游戏
-              </button>
-              <button className="result-btn" onClick={handleRestart}>
-                🔄 重新开始
-              </button>
-              <button className="result-btn" onClick={onBack}>
-                ← 返回选曲
-              </button>
-            </div>
+            <button className="start-btn" onClick={handlePauseToggle}>
+              ▶ 继续演奏
+            </button>
+            <button className="ghost-btn" onClick={handleRestart}>
+              ↺ 重新开始
+            </button>
+            <button className="ghost-btn" onClick={onBack}>
+              ← 返回选曲
+            </button>
           </div>
         </div>
       )}
 
       {finished && (
         <div className="result-overlay">
-          <div className="result-content">
-            <h2>演奏完成！</h2>
-            <div className="result-score">
-              <small>最终得分</small>
-              <strong>{score.toLocaleString()}</strong>
-              {score >= bestScore && score > 0 && (
-                <span className="new-record">新纪录！</span>
+          <div className="result-card">
+            <h2>演奏结束</h2>
+            <div className="result-score">{score.toLocaleString()}</div>
+            <div className="result-grade">
+              {perfectCount === totalNotes && totalNotes > 0
+                ? "🏆 PERFECT 全中"
+                : missCount === 0
+                ? "⭐ FULL COMBO"
+                : score >= 50000
+                ? "✓ 良好"
+                : "继续加油！"}
+            </div>
+            <div className="result-stats">
+              <div className="result-summary-section">
+                <div className="result-section-title">总览</div>
+                <div>
+                  <span className="perfect">PERFECT</span>{" "}
+                  <strong>{perfectCount}</strong> / {totalNotes}
+                </div>
+                <div>
+                  <span className="good">GOOD</span>{" "}
+                  <strong>{goodCount}</strong>
+                </div>
+                <div>
+                  <span className="miss">MISS</span>{" "}
+                  <strong>{missCount}</strong>
+                </div>
+                <div>
+                  最大连击 <strong className="combo-num">{maxCombo}</strong>
+                </div>
+              </div>
+
+              {totalTapNotes > 0 && (
+                <div className="result-summary-section">
+                  <div className="result-section-title">点击音符</div>
+                  <div className="result-stats-small">
+                    <span className="perfect">P</span>{" "}
+                    <strong>{tapPerfectCount}</strong>
+                  </div>
+                  <div className="result-stats-small">
+                    <span className="good">G</span>{" "}
+                    <strong>{tapGoodCount}</strong>
+                  </div>
+                  <div className="result-stats-small">
+                    <span className="miss">M</span>{" "}
+                    <strong>{tapMissCount}</strong>
+                  </div>
+                  <div className="result-stats-small subtle">
+                    共 {totalTapNotes} 个
+                  </div>
+                </div>
+              )}
+
+              {totalLongNotes > 0 && (
+                <div className="result-summary-section">
+                  <div className="result-section-title">长按音符</div>
+                  <div className="result-stats-small">
+                    <span className="perfect">P</span>{" "}
+                    <strong>{longPerfectCount}</strong>
+                  </div>
+                  <div className="result-stats-small">
+                    <span className="good">G</span>{" "}
+                    <strong>{longGoodCount}</strong>
+                  </div>
+                  <div className="result-stats-small">
+                    <span className="miss">M</span>{" "}
+                    <strong>{longMissCount}</strong>
+                  </div>
+                  <div className="result-stats-small subtle">
+                    共 {totalLongNotes} 个
+                  </div>
+                </div>
               )}
             </div>
-
-            <div className="result-summary-section">
-              <h3 className="result-section-title">总览</h3>
-              <div className="result-stats">
-                <div>
-                  <small>Perfect</small>
-                  <strong className="perfect-text">{perfectCount}</strong>
-                </div>
-                <div>
-                  <small>Good</small>
-                  <strong className="good-text">{goodCount}</strong>
-                </div>
-                <div>
-                  <small>Miss</small>
-                  <strong className="miss-text">{missCount}</strong>
-                </div>
-                <div>
-                  <small>最大连击</small>
-                  <strong>{maxCombo}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="result-summary-section">
-              <h3 className="result-section-title">点击音符</h3>
-              <div className="result-stats result-stats-small">
-                <div>
-                  <small>Perfect</small>
-                  <strong className="perfect-text">{tapPerfectCount}</strong>
-                  <span className="stat-total">/ {totalTapNotes}</span>
-                </div>
-                <div>
-                  <small>Good</small>
-                  <strong className="good-text">{tapGoodCount}</strong>
-                </div>
-                <div>
-                  <small>Miss</small>
-                  <strong className="miss-text">{tapMissCount}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="result-summary-section">
-              <h3 className="result-section-title">长按音符</h3>
-              <div className="result-stats result-stats-small">
-                <div>
-                  <small>Perfect</small>
-                  <strong className="perfect-text">{longPerfectCount}</strong>
-                  <span className="stat-total">/ {totalLongNotes}</span>
-                </div>
-                <div>
-                  <small>Good</small>
-                  <strong className="good-text">{longGoodCount}</strong>
-                </div>
-                <div>
-                  <small>Miss</small>
-                  <strong className="miss-text">{longMissCount}</strong>
-                </div>
-              </div>
-            </div>
-
             <div className="result-actions">
-              <button className="result-btn primary" onClick={handleRestart}>
-                再来一次
+              <button className="ghost-btn" onClick={onBack}>
+                ← 返回选曲
               </button>
               <button
-                className="result-btn"
+                className="ghost-btn"
                 onClick={() => onOpenScorebook(song.id)}
               >
-                📋 查看成绩册
+                📖 成绩册
               </button>
-              <button className="result-btn" onClick={onBack}>
-                返回选曲
+              <button className="start-btn" onClick={handleRestart}>
+                ↺ 再来一次
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {typeof window !== "undefined" &&
+        (("ontouchstart" in window) || (navigator.maxTouchPoints > 0)) &&
+        isPlaying && (
+          <div className="mobile-hint">
+            竖屏：拇指点击下方按钮 ①②③④
+          </div>
+        )}
     </div>
   );
 }
