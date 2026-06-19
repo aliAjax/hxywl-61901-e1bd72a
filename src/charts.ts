@@ -1,4 +1,4 @@
-import type { Chart, ChartNote, Song } from "./types";
+import type { Chart, ChartNote, NoteType, Song } from "./types";
 import { songs } from "./songs";
 
 const TRACK_COUNT = 4;
@@ -39,6 +39,7 @@ function buildChartForSong(song: Song): Chart {
     0.12 + song.difficultyLevel * 0.065
   );
   const doubleChance = Math.min(0.5, song.difficultyLevel * 0.04);
+  const longNoteChance = Math.min(0.35, 0.05 + song.difficultyLevel * 0.03);
   const introMs = 2000;
   const outroMs = 2000;
   let noteId = 0;
@@ -47,6 +48,15 @@ function buildChartForSong(song: Song): Chart {
   const stepMs = beatMs / subdivision;
 
   const pattern = song.previewPattern.length > 0 ? song.previewPattern : [0, 1, 2, 3];
+
+  const longDurations = [
+    Math.round(beatMs * 1),
+    Math.round(beatMs * 1.5),
+    Math.round(beatMs * 2),
+    Math.round(beatMs * 3),
+  ];
+
+  const skipUntil: Record<number, number> = {};
 
   for (let t = introMs; t < totalDuration - outroMs; t += stepMs) {
     const beatIndex = Math.floor(t / beatMs);
@@ -82,20 +92,39 @@ function buildChartForSong(song: Song): Chart {
       if (!onStrongBeat && rng.next() < 0.3) {
         track = (track + 1 + rng.nextInt(0, 1)) % TRACK_COUNT;
       }
+
+      if (skipUntil[track] && t < skipUntil[track]) {
+        continue;
+      }
+
+      let noteType: NoteType = "tap";
+      let noteDuration: number | undefined = undefined;
+
+      if (onStrongBeat && rng.next() < longNoteChance) {
+        noteType = "long";
+        noteDuration = longDurations[rng.nextInt(0, longDurations.length - 1)];
+        skipUntil[track] = t + noteDuration + stepMs;
+      }
+
       notes.push({
         id: noteId++,
         time: Math.round(t),
         track,
+        type: noteType,
+        duration: noteDuration,
       });
 
-      if (rng.next() < doubleChance && onStrongBeat) {
-        const otherTracks = [0, 1, 2, 3].filter((tr) => tr !== track);
-        const otherTrack = otherTracks[rng.nextInt(0, otherTracks.length - 1)];
-        notes.push({
-          id: noteId++,
-          time: Math.round(t),
-          track: otherTrack,
-        });
+      if (rng.next() < doubleChance && onStrongBeat && noteType === "tap") {
+        const otherTracks = [0, 1, 2, 3].filter((tr) => tr !== track && !(skipUntil[tr] && t < skipUntil[tr]));
+        if (otherTracks.length > 0) {
+          const otherTrack = otherTracks[rng.nextInt(0, otherTracks.length - 1)];
+          notes.push({
+            id: noteId++,
+            time: Math.round(t),
+            track: otherTrack,
+            type: "tap",
+          });
+        }
       }
     }
 
@@ -110,9 +139,14 @@ function buildChartForSong(song: Song): Chart {
     notes[i].id = i;
   }
 
+  const totalTapNotes = notes.filter((n) => n.type === "tap").length;
+  const totalLongNotes = notes.filter((n) => n.type === "long").length;
+
   return {
     songId: song.id,
     totalNotes: notes.length,
+    totalTapNotes,
+    totalLongNotes,
     notes,
     audioBeats: audioBeats.sort((a, b) => a.time - b.time),
   };

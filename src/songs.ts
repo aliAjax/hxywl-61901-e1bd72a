@@ -112,11 +112,26 @@ const MAX_RECORDS_PER_SONG = 10;
 export function getPlayRecords(songId?: string): PlayRecord[] {
   try {
     const raw = localStorage.getItem(RECORDS_KEY);
-    const all: PlayRecord[] = raw ? JSON.parse(raw) : [];
+    const all: (PlayRecord & Partial<PlayRecord>)[] = raw ? JSON.parse(raw) : [];
+    const normalized: PlayRecord[] = all.map((r) => ({
+      songId: r.songId,
+      score: r.score,
+      maxCombo: r.maxCombo,
+      perfectCount: r.perfectCount,
+      goodCount: r.goodCount,
+      missCount: r.missCount,
+      tapPerfectCount: r.tapPerfectCount ?? 0,
+      tapGoodCount: r.tapGoodCount ?? 0,
+      tapMissCount: r.tapMissCount ?? 0,
+      longPerfectCount: r.longPerfectCount ?? 0,
+      longGoodCount: r.longGoodCount ?? 0,
+      longMissCount: r.longMissCount ?? 0,
+      completedAt: r.completedAt,
+    }));
     if (songId) {
-      return all.filter((r) => r.songId === songId);
+      return normalized.filter((r) => r.songId === songId);
     }
-    return all;
+    return normalized;
   } catch {
     return [];
   }
@@ -181,27 +196,27 @@ export const tutorialSteps: TutorialStep[] = [
   {
     id: 1,
     title: "欢迎来到节奏点击！",
-    description: "本教学将带你了解游戏玩法，约 1 分钟完成。观察上方四条彩色轨道，音符会从顶部落下。",
+    description: "本教学将带你了解游戏玩法，约 1.5 分钟完成。观察上方四条彩色轨道，音符会从顶部落下。",
     waitMs: 4000,
   },
   {
     id: 2,
     title: "音符下落演示",
-    description: "看！音符从上方缓缓落下，目标是在它们到达底部判定线时准确按下对应按键。",
+    description: "看！音符从上方缓缓落下，目标是在它们到达底部判定线时准确按下对应按键或轨道。",
     autoSpawnPattern: [0, 1, 2, 3, 0, 1, 2, 3],
     autoSpawnInterval: 600,
     waitMs: 6000,
   },
   {
     id: 3,
-    title: "按键操作说明",
-    description: "四条轨道分别对应键盘 D（左一）、F（左二）、J（右二）、K（右一），或直接点击下方按钮。",
-    waitMs: 4000,
+    title: "操作方式说明",
+    description: "键盘：D / F / J / K 对应四条轨道。移动端：直接点击下方彩色按钮或轨道区域即可。",
+    waitMs: 4500,
   },
   {
     id: 4,
     title: "Perfect 完美判定",
-    description: "在音符正中心到达判定线时按下，获得 PERFECT！得分最高 +300，连击中加成更多。请按下高亮轨道的按键试试！",
+    description: "在音符正中心到达判定线时按下，获得 PERFECT！得分最高 +300，连击中加成更多。请按下高亮轨道试试！",
     highlightTrack: 0,
     autoSpawnPattern: [0],
     autoSpawnInterval: 1500,
@@ -226,6 +241,12 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 7,
+    title: "长按音符说明",
+    description: "部分音符是长条形状的长按音符！在起点按下并保持按住，直到音符尾部到达判定线时再松开，即可完成长按。",
+    waitMs: 5000,
+  },
+  {
+    id: 8,
     title: "Miss 漏击与连击中断",
     description: "如果音符飞过判定线未点击则判定 MISS，连击会清零！注意看下方这个音符——故意漏掉它看看。",
     autoSpawnPattern: [1],
@@ -234,15 +255,15 @@ export const tutorialSteps: TutorialStep[] = [
     waitMs: 6500,
   },
   {
-    id: 8,
+    id: 9,
     title: "结算画面含义",
-    description: "演奏结束后会显示：分数、Perfect/Good/Miss 数量、最大连击数。达成新纪录会有特别提示！",
-    waitMs: 4000,
+    description: "演奏结束后会显示分数、Perfect/Good/Miss 数量，并分别统计点击音符和长按音符的命中情况。",
+    waitMs: 4500,
   },
   {
-    id: 9,
+    id: 10,
     title: "教学完成！",
-    description: "恭喜！你已掌握所有基础玩法，去选择一首歌正式开始挑战吧！",
+    description: "恭喜！你已掌握所有玩法，包括点击音符和长按音符。去选择一首歌正式开始挑战吧！",
     waitMs: 3000,
   },
 ];

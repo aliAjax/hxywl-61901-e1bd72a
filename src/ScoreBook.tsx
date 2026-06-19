@@ -168,6 +168,24 @@ export default function ScoreBook({ initialSongId, onBack }: ScoreBookProps) {
                           <strong>{record.maxCombo}</strong>
                         </div>
                       </div>
+                      <div className="record-note-breakdown">
+                        <div className="breakdown-col">
+                          <div className="breakdown-label">点击音符</div>
+                          <div className="breakdown-values">
+                            <span className="perfect-text">P:{record.tapPerfectCount ?? 0}</span>
+                            <span className="good-text">G:{record.tapGoodCount ?? 0}</span>
+                            <span className="miss-text">M:{record.tapMissCount ?? 0}</span>
+                          </div>
+                        </div>
+                        <div className="breakdown-col">
+                          <div className="breakdown-label">长按音符</div>
+                          <div className="breakdown-values">
+                            <span className="perfect-text">P:{record.longPerfectCount ?? 0}</span>
+                            <span className="good-text">G:{record.longGoodCount ?? 0}</span>
+                            <span className="miss-text">M:{record.longMissCount ?? 0}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );

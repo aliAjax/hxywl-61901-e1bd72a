@@ -1601,3 +1601,271 @@ button {
     padding: 3px 8px;
   }
 }
+
+.mobile-portrait .play-area {
+  margin-top: 12px;
+}
+
+.portrait-area .tracks-container {
+  height: auto;
+  min-height: 560px;
+  aspect-ratio: 9 / 14;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  width: 100%;
+}
+
+.mobile-portrait .track {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.mobile-portrait .track:first-child,
+.mobile-portrait .track:last-child {
+  border: none;
+}
+
+.mobile-portrait .track:not(:last-child) {
+  border-right: 2px solid;
+}
+
+.mobile-portrait .track.pressed {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 40px rgba(255, 255, 255, 0.06);
+}
+
+.note-long-tail {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  border-radius: 8px;
+  border: 2px solid;
+  transform: translateY(-50%);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.note-long-tail.holding {
+  opacity: 1;
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.25);
+  filter: brightness(1.2);
+}
+
+.note-long-head {
+  z-index: 2;
+}
+
+.note-long-start {
+  z-index: 1;
+}
+
+.touch-track-btn {
+  min-height: 96px;
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  border: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.touch-track-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.25);
+}
+
+.touch-track-btn.pressed {
+  transform: scale(0.97) translateY(2px);
+  filter: brightness(1.15);
+}
+
+.touch-track-btn:disabled {
+  filter: grayscale(0.4);
+}
+
+.mobile-portrait .portrait-buttons {
+  gap: 6px;
+  padding: 8px;
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.mobile-portrait .portrait-buttons .track-btn {
+  min-height: 88px;
+  border-radius: 16px;
+  font-size: 26px;
+}
+
+.mobile-hint {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .mobile-hint {
+    display: block;
+    margin-bottom: 16px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    color: #67e8f9;
+    font-size: 12px;
+    font-weight: 600;
+  }
+}
+
+.judge-long {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.judge-type-label {
+  font-size: 0.55em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  letter-spacing: 1px;
+}
+
+.result-summary-section {
+  margin-bottom: 14px;
+  text-align: left;
+}
+
+.result-section-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.result-stats-small {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.result-stats-small > div {
+  padding: 10px 8px;
+  text-align: center;
+  position: relative;
+}
+
+.result-stats-small strong {
+  font-size: 18px;
+}
+
+.stat-total {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+@media (max-width: 820px) {
+  .tracks-container {
+    height: auto;
+    min-height: 560px;
+  }
+
+  .track-buttons .track-btn {
+    min-height: 80px;
+    font-size: 24px;
+  }
+
+  .portrait-area .tracks-container {
+    min-height: 480px;
+    aspect-ratio: 9 / 13;
+  }
+
+  .note {
+    left: 8%;
+    right: 8%;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  .hit-zone {
+    bottom: 32px;
+    left: 6%;
+    right: 6%;
+    height: 60px;
+    border-radius: 14px;
+  }
+
+  .hit-label {
+    font-size: 22px;
+  }
+
+  .note-long-tail {
+    left: 10%;
+    right: 10%;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 600px) {
+  .portrait-area .tracks-container {
+    min-height: 520px;
+    aspect-ratio: 9 / 16;
+  }
+
+  .mobile-portrait .portrait-buttons .track-btn {
+    min-height: 100px;
+    font-size: 30px;
+  }
+}
+
+@media (orientation: landscape) {
+  .landscape-area .tracks-container {
+    height: 400px;
+  }
+
+  .landscape-buttons .track-btn {
+    min-height: 64px;
+    font-size: 20px;
+  }
+}
+
+.record-note-breakdown {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.2);
+}
+
+.breakdown-col {
+  flex: 1;
+}
+
+.breakdown-label {
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.breakdown-values {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.breakdown-values span {
+  font-variant-numeric: tabular-nums;
+}

@@ -1,9 +1,11 @@
-import type { Chart, ChartNote, GameStats, JudgeType, Song } from "./types";
+import type { Chart, ChartNote, GameStats, JudgeType, NoteType, Song } from "./types";
 import { getChartForSong } from "./charts";
 
 export const PERFECT_WINDOW_MS = 50;
 export const GOOD_WINDOW_MS = 110;
 export const MISS_WINDOW_MS = 150;
+export const LONG_NOTE_END_PERFECT_WINDOW_MS = 80;
+export const LONG_NOTE_END_GOOD_WINDOW_MS = 180;
 export const NOTE_FALL_SECONDS = 1.8;
 export const NOTE_FALL_MS = NOTE_FALL_SECONDS * 1000;
 export const TRACK_HEIGHT = 560;
@@ -11,22 +13,42 @@ export const HIT_ZONE_BOTTOM = 65;
 
 export interface ChartPlayerCallbacks {
   onNoteSpawn: (note: SpawnedNote) => void;
-  onNoteUpdate: (id: number, y: number) => void;
-  onNoteJudge: (noteId: number, judge: JudgeType) => void;
+  onNoteUpdate: (id: number, y: number, endY?: number) => void;
+  onNoteJudge: (noteId: number, judge: JudgeType, phase?: "start" | "end") => void;
   onNoteRemove: (id: number) => void;
-  onJudge: (judge: JudgeType, track: number) => void;
+  onJudge: (judge: JudgeType, track: number, noteType?: NoteType) => void;
   onStatsChange: (stats: GameStats) => void;
   onTimeUpdate: (elapsedMs: number) => void;
   onFinish: (finalStats: GameStats) => void;
+  onLongNoteHoldChange: (noteId: number, isHolding: boolean) => void;
 }
 
 export interface SpawnedNote {
   id: number;
   track: number;
   targetTime: number;
+  type: NoteType;
+  duration?: number;
+  endTime?: number;
 }
 
 type PlayerState = "idle" | "playing" | "paused" | "finished";
+
+interface InternalActiveNote {
+  id: number;
+  track: number;
+  targetTime: number;
+  y: number;
+  judged: boolean;
+  missed: boolean;
+  type: NoteType;
+  duration?: number;
+  endTime?: number;
+  longHolding: boolean;
+  longStartJudged: boolean;
+  longStartJudgeType?: JudgeType;
+  longEndJudged: boolean;
+}
 
 export class ChartPlayer {
   private song: Song;
@@ -47,17 +69,8 @@ export class ChartPlayer {
 
   private chartNoteCursor = 0;
 
-  private activeNotes = new Map<
-    number,
-    {
-      id: number;
-      track: number;
-      targetTime: number;
-      y: number;
-      judged: boolean;
-      missed: boolean;
-    }
-  >();
+  private activeNotes = new Map<number, InternalActiveNote>();
+  private trackHeldState = new Map<number, { noteId: number | null }>();
 
   private stats: GameStats = {
     score: 0,
@@ -66,6 +79,12 @@ export class ChartPlayer {
     perfectCount: 0,
     goodCount: 0,
     missCount: 0,
+    tapPerfectCount: 0,
+    tapGoodCount: 0,
+    tapMissCount: 0,
+    longPerfectCount: 0,
+    longGoodCount: 0,
+    longMissCount: 0,
   };
 
   private hitSoundTimers: number[] = [];
@@ -74,6 +93,9 @@ export class ChartPlayer {
     this.song = song;
     this.chart = getChartForSong(song.id);
     this.cb = callbacks;
+    for (let i = 0; i < 4; i++) {
+      this.trackHeldState.set(i, { noteId: null });
+    }
   }
 
   getStats(): GameStats {
@@ -238,7 +260,7 @@ export class ChartPlayer {
     }
   }
 
-  private applyJudge(judge: JudgeType, track: number) {
+  private applyJudge(judge: JudgeType, track: number, noteType: NoteType) {
     if (!judge) return;
     if (judge === "perfect") {
       const gain = 300 * (1 + Math.floor(this.stats.combo / 10) * 0.1);
@@ -246,19 +268,34 @@ export class ChartPlayer {
       this.stats.combo += 1;
       this.stats.maxCombo = Math.max(this.stats.maxCombo, this.stats.combo);
       this.stats.perfectCount += 1;
+      if (noteType === "tap") {
+        this.stats.tapPerfectCount += 1;
+      } else {
+        this.stats.longPerfectCount += 1;
+      }
     } else if (judge === "good") {
       const gain = 150 * (1 + Math.floor(this.stats.combo / 10) * 0.1);
       this.stats.score += gain;
       this.stats.combo += 1;
       this.stats.maxCombo = Math.max(this.stats.maxCombo, this.stats.combo);
       this.stats.goodCount += 1;
+      if (noteType === "tap") {
+        this.stats.tapGoodCount += 1;
+      } else {
+        this.stats.longGoodCount += 1;
+      }
     } else if (judge === "miss") {
       this.stats.combo = 0;
       this.stats.missCount += 1;
+      if (noteType === "tap") {
+        this.stats.tapMissCount += 1;
+      } else {
+        this.stats.longMissCount += 1;
+      }
       this.playMissSound();
     }
     this.cb.onStatsChange({ ...this.stats });
-    this.cb.onJudge(judge, track);
+    this.cb.onJudge(judge, track, noteType);
   }
 
   private computeYFromElapsed(targetTimeMs: number, elapsedMs: number): number {
@@ -268,15 +305,18 @@ export class ChartPlayer {
     return y;
   }
 
-  judgeTrack(track: number) {
+  judgeTrackPress(track: number) {
     if (this.state !== "playing") return;
     const elapsed = this.getElapsedMs();
+
     let hitNote: ChartNote | null = null;
     let hitNoteActiveId: number | null = null;
     let hitDistance = Infinity;
 
     for (const [activeId, active] of this.activeNotes) {
       if (active.track !== track || active.judged || active.missed) continue;
+      if (active.type === "long" && active.longStartJudged) continue;
+
       const distance = Math.abs(elapsed - active.targetTime);
       if (distance < GOOD_WINDOW_MS && distance < hitDistance) {
         const cn = this.chart.notes.find((n) => n.id === activeId);
@@ -298,15 +338,68 @@ export class ChartPlayer {
       if (judge) {
         const active = this.activeNotes.get(hitNoteActiveId);
         if (active) {
-          active.judged = true;
+          if (active.type === "tap") {
+            active.judged = true;
+            this.cb.onNoteJudge(hitNoteActiveId, judge);
+            this.applyJudge(judge, track, "tap");
+          } else {
+            active.longStartJudged = true;
+            active.longStartJudgeType = judge;
+            active.longHolding = true;
+            this.trackHeldState.get(track)!.noteId = hitNoteActiveId;
+            this.cb.onNoteJudge(hitNoteActiveId, judge, "start");
+            this.cb.onLongNoteHoldChange(hitNoteActiveId, true);
+            this.applyJudge(judge, track, "long");
+          }
         }
-        this.cb.onNoteJudge(hitNoteActiveId, judge);
-        this.applyJudge(judge, track);
         this.playHitSound(track);
       }
     } else {
-      this.applyJudge("miss", track);
+      this.applyJudge("miss", track, "tap");
     }
+  }
+
+  judgeTrackRelease(track: number) {
+    if (this.state !== "playing") return;
+    const elapsed = this.getElapsedMs();
+    const held = this.trackHeldState.get(track);
+    if (!held || held.noteId === null) return;
+
+    const noteId = held.noteId;
+    const active = this.activeNotes.get(noteId);
+    if (!active || active.type !== "long") {
+      held.noteId = null;
+      return;
+    }
+
+    const endTime = active.endTime ?? active.targetTime + (active.duration ?? 0);
+    const distance = Math.abs(elapsed - endTime);
+
+    active.longHolding = false;
+    this.cb.onLongNoteHoldChange(noteId, false);
+
+    let endJudge: JudgeType = "miss";
+    if (active.longStartJudgeType !== "miss" && active.longStartJudged) {
+      if (distance < LONG_NOTE_END_PERFECT_WINDOW_MS) {
+        endJudge = "perfect";
+      } else if (distance < LONG_NOTE_END_GOOD_WINDOW_MS) {
+        endJudge = "good";
+      } else {
+        endJudge = active.longStartJudgeType === "perfect" ? "good" : (active.longStartJudgeType ?? "good");
+      }
+    }
+
+    if (endJudge === "miss") {
+      this.applyJudge("miss", track, "long");
+    } else if (endJudge !== active.longStartJudgeType && active.longStartJudgeType !== "perfect") {
+      // End judgement is better or equal than start, keep start
+    }
+
+    active.judged = true;
+    active.longEndJudged = true;
+    this.cb.onNoteJudge(noteId, endJudge, "end");
+    this.playHitSound(track);
+    held.noteId = null;
   }
 
   private processAudioBeats(elapsed: number) {
@@ -330,6 +423,7 @@ export class ChartPlayer {
       const note = this.chart.notes[this.chartNoteCursor];
       if (note.time <= this.getTotalDurationMs()) {
         const y = this.computeYFromElapsed(note.time, elapsed);
+        const endTime = note.type === "long" && note.duration ? note.time + note.duration : undefined;
         this.activeNotes.set(note.id, {
           id: note.id,
           track: note.track,
@@ -337,11 +431,20 @@ export class ChartPlayer {
           y,
           judged: false,
           missed: false,
+          type: note.type,
+          duration: note.duration,
+          endTime,
+          longHolding: false,
+          longStartJudged: false,
+          longEndJudged: false,
         });
         this.cb.onNoteSpawn({
           id: note.id,
           track: note.track,
           targetTime: note.time,
+          type: note.type,
+          duration: note.duration,
+          endTime,
         });
       }
       this.chartNoteCursor++;
@@ -354,20 +457,71 @@ export class ChartPlayer {
 
     for (const [id, active] of this.activeNotes) {
       const newY = this.computeYFromElapsed(active.targetTime, elapsed);
+      let endY: number | undefined = undefined;
+      if (active.type === "long" && active.endTime !== undefined) {
+        endY = this.computeYFromElapsed(active.endTime, elapsed);
+      }
       active.y = newY;
-      this.cb.onNoteUpdate(id, newY);
+      this.cb.onNoteUpdate(id, newY, endY);
 
-      if (!active.judged && !active.missed) {
-        const timePastTarget = elapsed - active.targetTime;
-        if (timePastTarget > MISS_WINDOW_MS) {
-          active.missed = true;
-          this.cb.onNoteJudge(id, "miss");
-          this.applyJudge("miss", active.track);
+      if (!active.missed) {
+        if (active.type === "tap") {
+          if (!active.judged) {
+            const timePastTarget = elapsed - active.targetTime;
+            if (timePastTarget > MISS_WINDOW_MS) {
+              active.missed = true;
+              this.cb.onNoteJudge(id, "miss");
+              this.applyJudge("miss", active.track, "tap");
+            }
+          }
+        } else {
+          if (!active.longStartJudged) {
+            const timePastStart = elapsed - active.targetTime;
+            if (timePastStart > MISS_WINDOW_MS) {
+              active.missed = true;
+              active.longStartJudged = true;
+              this.cb.onNoteJudge(id, "miss", "start");
+              this.applyJudge("miss", active.track, "long");
+            }
+          } else if (!active.longEndJudged && !active.longHolding) {
+            const endTime = active.endTime ?? active.targetTime + (active.duration ?? 0);
+            const timePastEnd = elapsed - endTime;
+            if (timePastEnd > LONG_NOTE_END_GOOD_WINDOW_MS) {
+              active.longEndJudged = true;
+              active.judged = true;
+              this.cb.onNoteJudge(id, "miss", "end");
+              this.applyJudge("miss", active.track, "long");
+              const held = this.trackHeldState.get(active.track);
+              if (held && held.noteId === id) {
+                held.noteId = null;
+              }
+            }
+          } else if (active.longHolding) {
+            const endTime = active.endTime ?? active.targetTime + (active.duration ?? 0);
+            if (elapsed > endTime + LONG_NOTE_END_GOOD_WINDOW_MS) {
+              active.longHolding = false;
+              active.longEndJudged = true;
+              active.judged = true;
+              this.cb.onLongNoteHoldChange(id, false);
+              this.cb.onNoteJudge(id, "perfect", "end");
+              const held = this.trackHeldState.get(active.track);
+              if (held && held.noteId === id) {
+                held.noteId = null;
+              }
+            }
+          }
         }
       }
 
-      if (active.y > hitZoneY + 120) {
+      const cleanupY = active.type === "long" && active.endTime !== undefined
+        ? this.computeYFromElapsed(active.endTime, elapsed)
+        : active.y;
+      if (cleanupY > hitZoneY + 200) {
         removeIds.push(id);
+        const held = this.trackHeldState.get(active.track);
+        if (held && held.noteId === id) {
+          held.noteId = null;
+        }
       }
     }
 
@@ -459,10 +613,19 @@ export class ChartPlayer {
       perfectCount: 0,
       goodCount: 0,
       missCount: 0,
+      tapPerfectCount: 0,
+      tapGoodCount: 0,
+      tapMissCount: 0,
+      longPerfectCount: 0,
+      longGoodCount: 0,
+      longMissCount: 0,
     };
     this.chartNoteCursor = 0;
     this.audioBeatCursor = 0;
     this.state = "idle";
+    for (let i = 0; i < 4; i++) {
+      this.trackHeldState.set(i, { noteId: null });
+    }
   }
 
   destroy() {

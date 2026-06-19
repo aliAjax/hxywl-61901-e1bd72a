@@ -488,7 +488,8 @@ export default function Tutorial({ onComplete, onSkip }: TutorialProps) {
               className={
                 "track-btn " +
                 (pressedTracks[idx] ? "pressed" : "") +
-                (highlighted ? " highlighted-btn" : "")
+                (highlighted ? " highlighted-btn" : "") +
+                " touch-track-btn"
               }
               style={{
                 background:
@@ -503,11 +504,17 @@ export default function Tutorial({ onComplete, onSkip }: TutorialProps) {
                   ? "0 0 24px " + color + "aa"
                   : "none",
               }}
-              onTouchStart={(e) => {
+              onPointerDown={(e) => {
                 e.preventDefault();
+                (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
                 judgeNote(idx);
               }}
-              onMouseDown={() => judgeNote(idx)}
+              onPointerUp={(e) => {
+                e.preventDefault();
+              }}
+              onPointerCancel={(e) => {
+                e.preventDefault();
+              }}
             >
               {label}
             </button>
