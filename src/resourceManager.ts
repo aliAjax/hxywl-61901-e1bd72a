@@ -490,6 +490,7 @@ class ResourceManager {
 
   private migrateLegacyRecords(): void {
     const legacyKey = "rhythm-play-records";
+    const newKey = STORAGE_KEYS.PLAY_RECORDS;
     const raw = localStorage.getItem(legacyKey);
     if (raw) {
       const parsed = safeParseJSON<PlayRecord[]>(raw, []);
@@ -508,11 +509,13 @@ class ResourceManager {
         longMissCount: r.longMissCount ?? 0,
         completedAt: r.completedAt,
       }));
-      localStorage.setItem(STORAGE_KEYS.PLAY_RECORDS, JSON.stringify(normalized));
-      try {
-        localStorage.removeItem(legacyKey);
-      } catch {
-        // ignore
+      localStorage.setItem(newKey, JSON.stringify(normalized));
+      if (legacyKey !== newKey) {
+        try {
+          localStorage.removeItem(legacyKey);
+        } catch {
+          // ignore
+        }
       }
       this.memoryCache.playRecords = normalized;
     }
@@ -520,9 +523,11 @@ class ResourceManager {
 
   private migrateLegacyCalibration(): void {
     const legacyKey = "rhythm-calibration-offset";
+    const newKey = STORAGE_KEYS.CALIBRATION;
+    if (legacyKey === newKey) return;
     const raw = localStorage.getItem(legacyKey);
     if (raw !== null) {
-      localStorage.setItem(STORAGE_KEYS.CALIBRATION, raw);
+      localStorage.setItem(newKey, raw);
       try {
         localStorage.removeItem(legacyKey);
       } catch {
@@ -533,9 +538,11 @@ class ResourceManager {
 
   private migrateLegacyTutorial(): void {
     const legacyKey = "rhythm-tutorial-completed";
+    const newKey = STORAGE_KEYS.TUTORIAL;
+    if (legacyKey === newKey) return;
     const raw = localStorage.getItem(legacyKey);
     if (raw !== null) {
-      localStorage.setItem(STORAGE_KEYS.TUTORIAL, raw);
+      localStorage.setItem(newKey, raw);
       try {
         localStorage.removeItem(legacyKey);
       } catch {
