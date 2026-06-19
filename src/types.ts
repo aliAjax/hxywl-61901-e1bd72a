@@ -24,3 +24,41 @@ export interface PlayRecord {
 }
 
 export type PageType = "select" | "play" | "tutorial" | "scorebook";
+
+export interface ChartNote {
+  id: number;
+  time: number;
+  track: number;
+}
+
+export interface Chart {
+  songId: string;
+  totalNotes: number;
+  notes: ChartNote[];
+  audioBeats: { time: number; freq: number; type: "kick" | "snare" | "hihat" | "melody" }[];
+}
+
+export type JudgeType = "perfect" | "good" | "miss" | null;
+
+export interface JudgeEvent {
+  type: JudgeType;
+  track: number;
+}
+
+export interface GameStats {
+  score: number;
+  combo: number;
+  maxCombo: number;
+  perfectCount: number;
+  goodCount: number;
+  missCount: number;
+}
+
+export interface ActiveNote {
+  id: number;
+  track: number;
+  spawnTime: number;
+  targetTime: number;
+  y: number;
+  judged: boolean;
+}
