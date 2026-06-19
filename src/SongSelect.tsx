@@ -7,6 +7,7 @@ import {
   formatDuration,
   getSongBestScore,
 } from "./songs";
+import ChartPreview from "./ChartPreview";
 
 interface SongSelectProps {
   selectedSongId: string | null;
@@ -253,6 +254,13 @@ export default function SongSelect({
               <span>历史最高分</span>
               <strong>{getSongBestScore(selectedSong.id).toLocaleString()}</strong>
             </div>
+
+            <ChartPreview
+              songId={selectedSong.id}
+              duration={selectedSong.duration}
+              coverColor={selectedSong.coverColor}
+              accentColor={selectedSong.accentColor}
+            />
 
             <button
               className="start-btn"
