@@ -13,6 +13,8 @@ interface ChartPreviewProps {
 const TRACK_COUNT = 4;
 const TRACK_COLORS = ["#4f46e5", "#06b6d4", "#f97316", "#ec4899"];
 const DENSITY_WINDOW_MS = 2000;
+const DEFAULT_VIEWPORT_SECONDS = 30;
+const ZOOM_LEVELS = [15, 30, 60, 120];
 
 export default function ChartPreview({
   songId,
@@ -28,12 +30,18 @@ export default function ChartPreview({
   const [dragStartX, setDragStartX] = useState(0);
   const [dragStartLeft, setDragStartLeft] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [viewportSeconds, setViewportSeconds] = useState(DEFAULT_VIEWPORT_SECONDS);
 
   useEffect(() => {
     setViewportLeft(0);
   }, [songId]);
 
   const totalDurationMs = duration * 1000;
+  const viewportDurationMs = Math.min(viewportSeconds * 1000, totalDurationMs);
+
+  const viewportZoomIndex = ZOOM_LEVELS.indexOf(viewportSeconds);
+  const canZoomIn = viewportZoomIndex > 0;
+  const canZoomOut = viewportZoomIndex < ZOOM_LEVELS.length - 1 && viewportSeconds * 1000 < totalDurationMs;
 
   const densityData = useMemo(() => {
     const windows: { time: number; count: number }[] = [];
@@ -111,11 +119,18 @@ export default function ChartPreview({
   }, [containerWidth]);
 
   const pxPerMs = useMemo(() => {
-    if (viewportWidth <= 0) return 0;
-    return viewportWidth / totalDurationMs;
-  }, [viewportWidth, totalDurationMs]);
+    if (viewportWidth <= 0 || viewportDurationMs <= 0) return 0;
+    return viewportWidth / viewportDurationMs;
+  }, [viewportWidth, viewportDurationMs]);
+
+  const maxLeft = Math.max(0, totalDurationMs - viewportDurationMs);
+
+  useEffect(() => {
+    setViewportLeft((prev) => Math.min(prev, maxLeft));
+  }, [maxLeft]);
 
   function handleMouseDown(e: React.MouseEvent) {
+    if (maxLeft <= 0) return;
     setIsDragging(true);
     setDragStartX(e.clientX);
     setDragStartLeft(viewportLeft);
@@ -125,7 +140,6 @@ export default function ChartPreview({
     if (!isDragging) return;
     const deltaX = e.clientX - dragStartX;
     const newLeft = dragStartLeft - deltaX / pxPerMs;
-    const maxLeft = Math.max(0, totalDurationMs - viewportWidth / pxPerMs);
     setViewportLeft(Math.max(0, Math.min(maxLeft, newLeft)));
   }
 
@@ -138,6 +152,7 @@ export default function ChartPreview({
   }
 
   function handleTouchStart(e: React.TouchEvent) {
+    if (maxLeft <= 0) return;
     if (e.touches.length === 1) {
       setIsDragging(true);
       setDragStartX(e.touches[0].clientX);
@@ -150,8 +165,19 @@ export default function ChartPreview({
     e.preventDefault();
     const deltaX = e.touches[0].clientX - dragStartX;
     const newLeft = dragStartLeft - deltaX / pxPerMs;
-    const maxLeft = Math.max(0, totalDurationMs - viewportWidth / pxPerMs);
     setViewportLeft(Math.max(0, Math.min(maxLeft, newLeft)));
+  }
+
+  function handleZoomIn() {
+    if (!canZoomIn) return;
+    const newSeconds = ZOOM_LEVELS[viewportZoomIndex - 1];
+    setViewportSeconds(newSeconds);
+  }
+
+  function handleZoomOut() {
+    if (!canZoomOut) return;
+    const newSeconds = ZOOM_LEVELS[viewportZoomIndex + 1];
+    setViewportSeconds(newSeconds);
   }
 
   function handleTouchEnd() {
@@ -171,13 +197,13 @@ export default function ChartPreview({
 
   const visibleNotes = useMemo(() => {
     const viewStart = viewportLeft;
-    const viewEnd = viewportLeft + viewportWidth / pxPerMs;
+    const viewEnd = viewportLeft + viewportDurationMs;
     return chart.notes.filter(
       (n) =>
         n.time >= viewStart - 100 &&
         n.time <= viewEnd + 100
     );
-  }, [chart.notes, viewportLeft, viewportWidth, pxPerMs]);
+  }, [chart.notes, viewportLeft, viewportDurationMs]);
 
   function getNoteX(note: ChartNote): number {
     return (note.time - viewportLeft) * pxPerMs;
@@ -194,11 +220,30 @@ export default function ChartPreview({
     <div className="chart-preview">
       <div className="preview-header">
         <span className="preview-label">谱面预览</span>
-        <span className="preview-hint">拖动查看</span>
+        <div className="preview-controls">
+          <button
+            className={`zoom-btn ${!canZoomIn ? "disabled" : ""}`}
+            onClick={handleZoomIn}
+            disabled={!canZoomIn}
+            title="放大"
+          >
+            +
+          </button>
+          <span className="zoom-label">{viewportSeconds}s</span>
+          <button
+            className={`zoom-btn ${!canZoomOut ? "disabled" : ""}`}
+            onClick={handleZoomOut}
+            disabled={!canZoomOut}
+            title="缩小"
+          >
+            −
+          </button>
+          <span className="preview-hint">拖动查看</span>
+        </div>
       </div>
 
       <div
-        className={`preview-container ${isDragging ? "dragging" : ""}`}
+        className={`preview-container ${isDragging ? "dragging" : ""} ${maxLeft <= 0 ? "no-scroll" : ""}`}
         ref={containerRef}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -211,21 +256,26 @@ export default function ChartPreview({
         <div className="density-section">
           <div className="section-label">难度密度</div>
           <div className="density-chart" style={{ height: densityHeight }}>
-            {peakSections.map((section, i) => (
-              <div
-                key={i}
-                className="peak-section"
-                style={{
-                  left: `${timeToX(section.start)}px`,
-                  width: `${(section.end - section.start) * pxPerMs}px`,
-                  background: `linear-gradient(180deg, ${coverColor}33, ${accentColor}22)`,
-                  borderLeft: `1px solid ${accentColor}66`,
-                  borderRight: `1px solid ${accentColor}66`,
-                }}
-              >
-                <span className="peak-label">高潮</span>
-              </div>
-            ))}
+            {peakSections.map((section, i) => {
+              const x = timeToX(section.start);
+              const width = (section.end - section.start) * pxPerMs;
+              if (x + width < 0 || x > viewportWidth) return null;
+              return (
+                <div
+                  key={i}
+                  className="peak-section"
+                  style={{
+                    left: `${Math.max(0, x)}px`,
+                    width: `${Math.min(width, viewportWidth - Math.max(0, x))}px`,
+                    background: `linear-gradient(180deg, ${coverColor}33, ${accentColor}22)`,
+                    borderLeft: `1px solid ${accentColor}66`,
+                    borderRight: `1px solid ${accentColor}66`,
+                  }}
+                >
+                  <span className="peak-label">高潮</span>
+                </div>
+              );
+            })}
             <svg
               className="density-svg"
               width="100%"
@@ -344,7 +394,7 @@ export default function ChartPreview({
             className="scrollbar-thumb"
             style={{
               left: `${(viewportLeft / totalDurationMs) * 100}%`,
-              width: `${(viewportWidth / pxPerMs / totalDurationMs) * 100}%`,
+              width: `${(viewportDurationMs / totalDurationMs) * 100}%`,
               background: `linear-gradient(90deg, ${coverColor}, ${accentColor})`,
             }}
           />

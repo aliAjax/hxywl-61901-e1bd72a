@@ -1180,9 +1180,52 @@ button {
   color: #e2e8f0;
 }
 
+.preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .preview-hint {
   font-size: 11px;
   color: #64748b;
+  margin-left: 4px;
+}
+
+.zoom-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(30, 41, 59, 0.6);
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 150ms ease;
+  padding: 0;
+}
+
+.zoom-btn:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.2);
+  border-color: rgba(148, 163, 184, 0.5);
+}
+
+.zoom-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.zoom-label {
+  font-size: 11px;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  text-align: center;
 }
 
 .preview-container {
@@ -1193,6 +1236,10 @@ button {
   overflow: hidden;
   cursor: grab;
   user-select: none;
+}
+
+.preview-container.no-scroll {
+  cursor: default;
 }
 
 .preview-container.dragging {
