@@ -322,7 +322,6 @@ export default function Tutorial({ onComplete, onSkip }: TutorialProps) {
   }, [combo, hitsNeeded, currentStep, finished]);
 
   function handleRestart() {
-    if (gameLoopRef.current) cancelAnimationFrame(gameLoopRef.current);
     if (spawnTimerRef.current) clearInterval(spawnTimerRef.current);
     if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
     setStepIndex(0);

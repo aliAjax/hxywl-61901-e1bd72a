@@ -197,9 +197,9 @@ export const tutorialSteps: TutorialStep[] = [
     title: "Miss 漏击与连击中断",
     description: "如果音符飞过判定线未点击则判定 MISS，连击会清零！注意看下方这个音符——故意漏掉它看看。",
     autoSpawnPattern: [1],
-    autoSpawnInterval: 2000,
+    autoSpawnInterval: 800,
     forceMiss: true,
-    waitMs: 4000,
+    waitMs: 6500,
   },
   {
     id: 8,
