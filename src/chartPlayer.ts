@@ -412,10 +412,8 @@ export class ChartPlayer {
       endJudge = "perfect";
     } else if (distance <= LONG_NOTE_END_GOOD_WINDOW_MS) {
       endJudge = "good";
-    } else if (elapsed < endTime) {
-      endJudge = "miss";
     } else {
-      endJudge = active.longStartJudgeType === "perfect" ? "good" : (active.longStartJudgeType ?? "good");
+      endJudge = "miss";
     }
 
     if (endJudge === "miss") {
@@ -523,9 +521,10 @@ export class ChartPlayer {
                 active.longHolding = false;
                 active.longEndJudged = true;
                 active.judged = true;
+                active.missed = true;
                 this.cb.onLongNoteHoldChange(id, false);
-                this.cb.onNoteJudge(id, "perfect", "end");
-                this.playHitSound(active.track);
+                this.cb.onNoteJudge(id, "miss", "end");
+                this.applyJudge("miss", active.track, "long");
                 const held = this.trackHeldState.get(active.track);
                 if (held && held.noteId === id) held.noteId = null;
                 this.pauseDurationHeldAt.delete(id);

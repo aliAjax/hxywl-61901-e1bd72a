@@ -645,7 +645,9 @@ button {
 }
 
 .start-content,
-.result-content {
+.result-content,
+.start-card,
+.result-card {
   width: min(420px, 100%);
   padding: 32px 28px;
   border-radius: 20px;
@@ -674,15 +676,55 @@ button {
 }
 
 .start-content h2,
-.result-content h2 {
+.result-content h2,
+.start-card h2,
+.result-card h2 {
   margin: 0 0 8px;
   font-size: 28px;
 }
 
-.start-content p {
+.start-content p,
+.start-card p {
   margin: 0 0 20px;
   color: #94a3b8;
   font-size: 14px;
+}
+
+.cover-colors {
+  width: 84px;
+  height: 84px;
+  margin: 0 auto 18px;
+  border-radius: 18px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+}
+
+.start-card .meta {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.start-card .meta span {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.start-tip,
+.start-keys,
+.best-score,
+.start-shortcut {
+  display: block;
+}
+
+.start-shortcut {
+  color: #64748b;
+  font-size: 12px;
 }
 
 .start-info {
@@ -734,6 +776,19 @@ button {
   font-size: 42px;
   font-weight: 900;
   color: #f97316;
+}
+
+.result-card > .result-score {
+  display: block;
+  font-size: 42px;
+  font-weight: 900;
+  color: #f97316;
+}
+
+.result-grade {
+  margin: -8px 0 18px;
+  color: #cbd5e1;
+  font-weight: 700;
 }
 
 .new-record {
@@ -792,7 +847,8 @@ button {
   gap: 10px;
 }
 
-.result-btn {
+.result-btn,
+.ghost-btn {
   min-height: 46px;
   border: 1px solid rgba(148, 163, 184, 0.3);
   border-radius: 12px;
@@ -803,7 +859,8 @@ button {
   transition: all 150ms ease;
 }
 
-.result-btn:hover {
+.result-btn:hover,
+.ghost-btn:hover {
   background: rgba(148, 163, 184, 0.1);
 }
 
@@ -1497,7 +1554,8 @@ button {
   }
 }
 
-.pause-content {
+.pause-content,
+.pause-card {
   width: min(420px, 100%);
   padding: 32px 28px;
   border-radius: 20px;
@@ -1519,7 +1577,8 @@ button {
   }
 }
 
-.pause-content h2 {
+.pause-content h2,
+.pause-card h2 {
   margin: 0 0 6px;
   font-size: 28px;
 }
