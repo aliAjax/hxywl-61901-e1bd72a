@@ -13,6 +13,7 @@ interface SongSelectProps {
   onSelectSong: (song: Song) => void;
   onStartPlay: (song: Song) => void;
   onStartTutorial: () => void;
+  onOpenScorebook: (songId?: string | null) => void;
 }
 
 export default function SongSelect({
@@ -20,6 +21,7 @@ export default function SongSelect({
   onSelectSong,
   onStartPlay,
   onStartTutorial,
+  onOpenScorebook,
 }: SongSelectProps) {
   const [previewingSongId, setPreviewingSongId] = useState<string | null>(null);
   const [previewStep, setPreviewStep] = useState(-1);
@@ -113,8 +115,18 @@ export default function SongSelect({
   return (
     <div className="song-select">
       <header className="select-header">
-        <h1 className="select-title">选择歌曲</h1>
-        <p className="select-subtitle">共 {songs.length} 首歌曲可供演奏</p>
+        <div className="select-header-row">
+          <div>
+            <h1 className="select-title">选择歌曲</h1>
+            <p className="select-subtitle">共 {songs.length} 首歌曲可供演奏</p>
+          </div>
+          <button
+            className="scorebook-entry-btn"
+            onClick={() => onOpenScorebook()}
+          >
+            📋 成绩册
+          </button>
+        </div>
       </header>
 
       <div className="select-layout">
@@ -253,6 +265,13 @@ export default function SongSelect({
               onClick={onStartTutorial}
             >
               📘 重新观看教学
+            </button>
+
+            <button
+              className="scorebook-song-entry-btn"
+              onClick={() => onOpenScorebook(selectedSong.id)}
+            >
+              📋 查看成绩册
             </button>
           </div>
         </div>

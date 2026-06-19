@@ -3,6 +3,7 @@ import "./styles.css";
 import SongSelect from "./SongSelect";
 import GamePlay from "./GamePlay";
 import Tutorial from "./Tutorial";
+import ScoreBook from "./ScoreBook";
 import type { Song, PageType } from "./types";
 import { songs, isTutorialCompleted } from "./songs";
 
@@ -19,6 +20,7 @@ function App() {
     songs[0].id
   );
   const [initChecked, setInitChecked] = useState(false);
+  const [scorebookSongId, setScorebookSongId] = useState<string | null>(null);
 
   const selectedSong = songs.find((s) => s.id === selectedSongId) || songs[0];
 
@@ -55,6 +57,15 @@ function App() {
     setPage("select");
   }
 
+  function handleOpenScorebook(songId?: string | null) {
+    setScorebookSongId(songId || selectedSongId);
+    setPage("scorebook");
+  }
+
+  function handleBackFromScorebook() {
+    setPage("select");
+  }
+
   if (!initChecked) {
     return (
       <main className="game-shell">
@@ -88,11 +99,23 @@ function App() {
           onSelectSong={handleSelectSong}
           onStartPlay={handleStartPlay}
           onStartTutorial={handleStartTutorial}
+          onOpenScorebook={handleOpenScorebook}
         />
       )}
 
       {page === "play" && (
-        <GamePlay song={selectedSong} onBack={handleBackToSelect} />
+        <GamePlay
+          song={selectedSong}
+          onBack={handleBackToSelect}
+          onOpenScorebook={handleOpenScorebook}
+        />
+      )}
+
+      {page === "scorebook" && (
+        <ScoreBook
+          initialSongId={scorebookSongId}
+          onBack={handleBackFromScorebook}
+        />
       )}
     </main>
   );

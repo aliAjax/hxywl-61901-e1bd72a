@@ -1057,3 +1057,364 @@ button {
     font-size: 44px;
   }
 }
+
+.select-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.scorebook-entry-btn {
+  padding: 8px 18px;
+  border: 1px solid rgba(79, 70, 229, 0.5);
+  border-radius: 10px;
+  background: rgba(79, 70, 229, 0.12);
+  color: #c7d2fe;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: all 150ms ease;
+}
+
+.scorebook-entry-btn:hover {
+  background: rgba(79, 70, 229, 0.28);
+  border-color: rgba(79, 70, 229, 0.7);
+  color: #e0e7ff;
+}
+
+.scorebook-song-entry-btn {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  border-radius: 10px;
+  background: rgba(6, 182, 212, 0.1);
+  color: #a5f3fc;
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 10px;
+  transition: all 150ms ease;
+}
+
+.scorebook-song-entry-btn:hover {
+  background: rgba(6, 182, 212, 0.22);
+  border-color: rgba(6, 182, 212, 0.65);
+  color: #cffafe;
+}
+
+.scorebook {
+  margin-top: 16px;
+}
+
+.scorebook-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 4px 16px;
+}
+
+.scorebook-title-group {
+  flex: 1;
+}
+
+.scorebook-title {
+  margin: 0;
+  font-size: 24px;
+}
+
+.scorebook-subtitle {
+  margin: 4px 0 0;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.scorebook-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 16px;
+}
+
+.scorebook-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scorebook-song-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #f8fafc;
+  text-align: left;
+  transition: all 150ms ease;
+}
+
+.scorebook-song-tab:hover {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(30, 41, 59, 0.72);
+}
+
+.scorebook-song-tab.active {
+  border-color: var(--primary);
+  background: rgba(79, 70, 229, 0.1);
+  box-shadow: 0 0 20px rgba(79, 70, 229, 0.12);
+}
+
+.scorebook-song-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.9);
+  flex-shrink: 0;
+}
+
+.scorebook-song-tab-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.scorebook-song-tab-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scorebook-song-tab-best {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.scorebook-main {
+  min-width: 0;
+}
+
+.scorebook-song-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  margin-bottom: 16px;
+}
+
+.scorebook-song-cover {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  color: rgba(255, 255, 255, 0.9);
+  flex-shrink: 0;
+}
+
+.scorebook-song-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.scorebook-song-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.scorebook-song-artist {
+  margin: 2px 0 10px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.scorebook-song-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.scorebook-best-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f97316;
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.35);
+}
+
+.scorebook-empty {
+  text-align: center;
+  padding: 60px 20px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.scorebook-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.scorebook-empty p {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.scorebook-empty span {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.scorebook-records-header {
+  margin-bottom: 10px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.scorebook-record {
+  display: flex;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  margin-bottom: 8px;
+  transition: all 150ms ease;
+}
+
+.scorebook-record:hover {
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.scorebook-record.record-best {
+  border-color: rgba(249, 115, 22, 0.4);
+  background: rgba(249, 115, 22, 0.06);
+}
+
+.record-rank {
+  font-size: 18px;
+  font-weight: 800;
+  color: #64748b;
+  min-width: 36px;
+  display: flex;
+  align-items: center;
+}
+
+.record-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.record-top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.record-score {
+  font-size: 20px;
+  font-weight: 900;
+  color: #f8fafc;
+}
+
+.record-best-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fbbf24, #f97316);
+  color: #0f172a;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.record-time {
+  margin-left: auto;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.record-stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.record-stat {
+  text-align: center;
+}
+
+.record-stat small {
+  display: block;
+  color: #94a3b8;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.record-stat strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+@media (max-width: 820px) {
+  .scorebook-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .scorebook-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 4px;
+  }
+
+  .scorebook-song-tab {
+    flex-shrink: 0;
+    padding: 8px 10px;
+  }
+
+  .scorebook-song-thumb {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+
+  .scorebook-song-tab-name {
+    font-size: 12px;
+  }
+
+  .scorebook-song-hero {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .scorebook-song-cover {
+    width: 56px;
+    height: 56px;
+    font-size: 28px;
+  }
+
+  .record-stats {
+    gap: 12px;
+  }
+}

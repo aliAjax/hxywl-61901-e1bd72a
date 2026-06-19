@@ -1,4 +1,4 @@
-import type { Song } from "./types";
+import type { Song, PlayRecord } from "./types";
 
 export const songs: Song[] = [
   {
@@ -104,6 +104,38 @@ export function saveSongBestScore(songId: string, score: number): void {
   if (score > current) {
     localStorage.setItem(`rhythm-best-${songId}`, String(score));
   }
+}
+
+const RECORDS_KEY = "rhythm-play-records";
+const MAX_RECORDS_PER_SONG = 10;
+
+export function getPlayRecords(songId?: string): PlayRecord[] {
+  try {
+    const raw = localStorage.getItem(RECORDS_KEY);
+    const all: PlayRecord[] = raw ? JSON.parse(raw) : [];
+    if (songId) {
+      return all.filter((r) => r.songId === songId);
+    }
+    return all;
+  } catch {
+    return [];
+  }
+}
+
+export function savePlayRecord(record: PlayRecord): void {
+  const all = getPlayRecords();
+  all.push(record);
+  const grouped: Record<string, PlayRecord[]> = {};
+  for (const r of all) {
+    if (!grouped[r.songId]) grouped[r.songId] = [];
+    grouped[r.songId].push(r);
+  }
+  const trimmed: PlayRecord[] = [];
+  for (const key of Object.keys(grouped)) {
+    const records = grouped[key].sort((a, b) => b.completedAt - a.completedAt);
+    trimmed.push(...records.slice(0, MAX_RECORDS_PER_SONG));
+  }
+  localStorage.setItem(RECORDS_KEY, JSON.stringify(trimmed));
 }
 
 export const TUTORIAL_KEY = "rhythm-tutorial-completed";

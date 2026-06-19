@@ -13,4 +13,14 @@ export interface Song {
   previewPattern: number[];
 }
 
-export type PageType = "select" | "play" | "tutorial";
+export interface PlayRecord {
+  songId: string;
+  score: number;
+  maxCombo: number;
+  perfectCount: number;
+  goodCount: number;
+  missCount: number;
+  completedAt: number;
+}
+
+export type PageType = "select" | "play" | "tutorial" | "scorebook";

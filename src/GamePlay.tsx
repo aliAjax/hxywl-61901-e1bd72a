@@ -6,11 +6,13 @@ import {
   formatDuration,
   getSongBestScore,
   saveSongBestScore,
+  savePlayRecord,
 } from "./songs";
 
 interface GamePlayProps {
   song: Song;
   onBack: () => void;
+  onOpenScorebook: (songId?: string | null) => void;
 }
 
 interface Note {
@@ -26,7 +28,7 @@ const TRACK_COUNT = 4;
 const TRACK_LABELS = ["D", "F", "J", "K"];
 const TRACK_COLORS = ["#4f46e5", "#06b6d4", "#f97316", "#ec4899"];
 
-export default function GamePlay({ song, onBack }: GamePlayProps) {
+export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProps) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
@@ -234,9 +236,19 @@ export default function GamePlay({ song, onBack }: GamePlayProps) {
 
   useEffect(() => {
     if (finished && score > 0) {
-      saveSongBestScore(song.id, Math.floor(score));
+      const finalScore = Math.floor(score);
+      saveSongBestScore(song.id, finalScore);
+      savePlayRecord({
+        songId: song.id,
+        score: finalScore,
+        maxCombo,
+        perfectCount,
+        goodCount,
+        missCount,
+        completedAt: Date.now(),
+      });
     }
-  }, [finished, score, song.id]);
+  }, [finished, score, song.id, maxCombo, perfectCount, goodCount, missCount]);
 
   const progressPercent = Math.min(100, (elapsed / (song.duration * 1000)) * 100);
 
@@ -409,6 +421,9 @@ export default function GamePlay({ song, onBack }: GamePlayProps) {
             <div className="result-actions">
               <button className="result-btn primary" onClick={startGame}>
                 再来一次
+              </button>
+              <button className="result-btn" onClick={() => onOpenScorebook(song.id)}>
+                📋 查看成绩册
               </button>
               <button className="result-btn" onClick={onBack}>
                 返回选曲
