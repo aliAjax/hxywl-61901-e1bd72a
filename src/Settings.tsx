@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getCalibrationOffset, resetTutorialStatus, isTutorialCompleted } from "./songs";
+import { resourceManager } from "./resourceManager";
 
 interface SettingsProps {
   onBack: () => void;
@@ -15,6 +16,7 @@ interface SettingItem {
   value?: string;
   actionLabel?: string;
   onClick?: () => void;
+  danger?: boolean;
 }
 
 export default function Settings({
@@ -23,13 +25,20 @@ export default function Settings({
   onStartTutorial,
 }: SettingsProps) {
   const [, setTick] = useState(0);
+  const [message, setMessage] = useState<string | null>(null);
 
   const calibrationOffset = getCalibrationOffset();
   const tutorialDone = isTutorialCompleted();
+  const version = resourceManager.getVersion();
 
   const formatOffset = (ms: number): string => {
     if (ms === 0) return "0 ms";
     return ms > 0 ? `+${ms} ms` : `${ms} ms`;
+  };
+
+  const showMessage = (text: string) => {
+    setMessage(text);
+    window.setTimeout(() => setMessage(null), 3000);
   };
 
   const items: SettingItem[] = [
@@ -60,6 +69,74 @@ export default function Settings({
         if (window.confirm("确定要重置教学进度吗？")) {
           resetTutorialStatus();
           setTick((t) => t + 1);
+          showMessage("教学进度已重置");
+        }
+      },
+    },
+    {
+      id: "rebuild-charts",
+      icon: "🎼",
+      title: "重建所有谱面",
+      desc: "重新生成所有歌曲的谱面数据（不会影响分数和记录）",
+      actionLabel: "重建",
+      onClick: () => {
+        if (window.confirm("确定要重建所有谱面吗？")) {
+          const songs = resourceManager.getSongs();
+          for (const s of songs) {
+            resourceManager.rebuildChart(s.id);
+          }
+          showMessage("谱面已全部重建");
+        }
+      },
+    },
+    {
+      id: "reset-scores",
+      icon: "📊",
+      title: "清除所有分数",
+      desc: "重置所有歌曲的最高分和游玩记录，歌曲和谱面保留",
+      actionLabel: "清除分数",
+      danger: true,
+      onClick: () => {
+        if (window.confirm("确定要清除所有分数和游玩记录吗？此操作不可撤销！")) {
+          resourceManager.resetScores();
+          setTick((t) => t + 1);
+          showMessage("所有分数已清除");
+        }
+      },
+    },
+    {
+      id: "reset-settings",
+      icon: "⚙️",
+      title: "重置游戏设置",
+      desc: "重置校准值和教学状态，保留歌曲和分数",
+      actionLabel: "重置设置",
+      danger: true,
+      onClick: () => {
+        if (window.confirm("确定要重置游戏设置吗？")) {
+          resourceManager.resetSettings();
+          setTick((t) => t + 1);
+          showMessage("设置已重置");
+        }
+      },
+    },
+    {
+      id: "reset-all",
+      icon: "⚠️",
+      title: "清除所有本地数据",
+      desc: "完全重置，包括歌曲、谱面、分数和所有设置，游戏将恢复到首次打开状态",
+      actionLabel: "全部清除",
+      danger: true,
+      onClick: () => {
+        if (
+          window.confirm(
+            "确定要清除所有本地数据吗？此操作不可撤销！\n所有歌曲、分数和设置都会被删除。"
+          )
+        ) {
+          resourceManager.clearAllCache();
+          resourceManager.initialize();
+          setTick((t) => t + 1);
+          showMessage("已重置为初始状态，页面将刷新...");
+          window.setTimeout(() => window.location.reload(), 1200);
         }
       },
     },
@@ -77,6 +154,12 @@ export default function Settings({
         </div>
       </header>
 
+      {message && (
+        <div className="settings-message">
+          <span>{message}</span>
+        </div>
+      )}
+
       <div className="settings-list">
         {items.map((item) => (
           <div key={item.id} className="settings-item">
@@ -90,7 +173,9 @@ export default function Settings({
             </div>
             {item.actionLabel && item.onClick && (
               <button
-                className="settings-item-btn"
+                className={
+                  "settings-item-btn " + (item.danger ? "danger-btn" : "")
+                }
                 onClick={item.onClick}
               >
                 {item.actionLabel}
@@ -101,7 +186,10 @@ export default function Settings({
       </div>
 
       <div className="settings-about">
-        <small>节奏点击 v1.0 · 延迟校准模块</small>
+        <small>
+          节奏点击 v1.0 · 延迟校准模块 · 资源版本 v{version.schemaVersion}
+          (s{version.songsVersion}/c{version.chartsVersion}/sc{version.scoresVersion})
+        </small>
       </div>
     </div>
   );

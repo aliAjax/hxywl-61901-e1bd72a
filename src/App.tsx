@@ -6,8 +6,9 @@ import Tutorial from "./Tutorial";
 import ScoreBook from "./ScoreBook";
 import Calibration from "./Calibration";
 import Settings from "./Settings";
-import type { Song, PageType } from "./types";
+import type { Song, PageType, ResourceInitResult } from "./types";
 import { songs, isTutorialCompleted } from "./songs";
+import { resourceManager } from "./resourceManager";
 
 const game = {
   id: "hxywl-61901",
@@ -22,17 +23,46 @@ function App() {
     songs[0].id
   );
   const [initChecked, setInitChecked] = useState(false);
+  const [initResult, setInitResult] = useState<ResourceInitResult | null>(null);
+  const [resourceWarning, setResourceWarning] = useState<string | null>(null);
   const [scorebookSongId, setScorebookSongId] = useState<string | null>(null);
   const [calibrationReturnPage, setCalibrationReturnPage] = useState<PageType>("select");
 
   const selectedSong = songs.find((s) => s.id === selectedSongId) || songs[0];
 
   useEffect(() => {
-    const completed = isTutorialCompleted();
-    if (!completed) {
-      setPage("tutorial");
+    try {
+      const result = resourceManager.initialize();
+      setInitResult(result);
+
+      if (result.warnings.length > 0) {
+        setResourceWarning(result.warnings.join("；"));
+        const timer = window.setTimeout(() => {
+          setResourceWarning(null);
+        }, 5000);
+        return () => window.clearTimeout(timer);
+      }
+    } catch (e) {
+      console.error("资源初始化失败，执行紧急恢复:", e);
+      try {
+        resourceManager.clearAllCache();
+        const fallback = resourceManager.initialize();
+        setInitResult(fallback);
+        setResourceWarning("资源严重损坏，已重置为默认状态");
+        const timer = window.setTimeout(() => {
+          setResourceWarning(null);
+        }, 5000);
+        return () => window.clearTimeout(timer);
+      } catch (fatal) {
+        console.error("紧急恢复也失败:", fatal);
+      }
+    } finally {
+      const completed = isTutorialCompleted();
+      if (!completed) {
+        setPage("tutorial");
+      }
+      setInitChecked(true);
     }
-    setInitChecked(true);
   }, []);
 
   function handleSelectSong(song: Song) {
@@ -102,6 +132,7 @@ function App() {
           <p>{game.id} · H5Game · Port {game.port}</p>
           <h1>{game.title}</h1>
           <span>{game.tagline}</span>
+          <p className="loading-hint">正在加载资源...</p>
         </section>
       </main>
     );
@@ -114,6 +145,16 @@ function App() {
         <h1>{game.title}</h1>
         <span>{game.tagline}</span>
       </section>
+
+      {resourceWarning && (
+        <div className="resource-warning" onClick={() => setResourceWarning(null)}>
+          <span className="resource-warning-icon">⚠️</span>
+          <span className="resource-warning-text">{resourceWarning}</span>
+          <button className="resource-warning-close" onClick={() => setResourceWarning(null)}>
+            ✕
+          </button>
+        </div>
+      )}
 
       {page === "tutorial" && (
         <Tutorial

@@ -85,3 +85,28 @@ export interface ActiveNote {
   longStartJudged?: boolean;
   longEndTime?: number;
 }
+
+export interface ResourceVersion {
+  schemaVersion: number;
+  songsVersion: number;
+  chartsVersion: number;
+  scoresVersion: number;
+}
+
+export interface ResourceIntegrityReport {
+  ok: boolean;
+  missingSongs: string[];
+  missingCharts: string[];
+  corruptedSongs: string[];
+  corruptedCharts: string[];
+  corruptedScores: string[];
+  versionMismatch: boolean;
+}
+
+export interface ResourceInitResult {
+  initialized: boolean;
+  recoveredFromCorruption: boolean;
+  cleanedStaleData: boolean;
+  warnings: string[];
+  version: ResourceVersion;
+}
