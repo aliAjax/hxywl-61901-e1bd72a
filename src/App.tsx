@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./styles.css";
 import SongSelect from "./SongSelect";
 import GamePlay from "./GamePlay";
+import Tutorial from "./Tutorial";
 import type { Song, PageType } from "./types";
-import { songs } from "./songs";
+import { songs, isTutorialCompleted } from "./songs";
 
 const game = {
   id: "hxywl-61901",
@@ -17,8 +18,17 @@ function App() {
   const [selectedSongId, setSelectedSongId] = useState<string | null>(
     songs[0].id
   );
+  const [initChecked, setInitChecked] = useState(false);
 
   const selectedSong = songs.find((s) => s.id === selectedSongId) || songs[0];
+
+  useEffect(() => {
+    const completed = isTutorialCompleted();
+    if (!completed) {
+      setPage("tutorial");
+    }
+    setInitChecked(true);
+  }, []);
 
   function handleSelectSong(song: Song) {
     setSelectedSongId(song.id);
@@ -33,6 +43,30 @@ function App() {
     setPage("select");
   }
 
+  function handleStartTutorial() {
+    setPage("tutorial");
+  }
+
+  function handleTutorialComplete() {
+    setPage("select");
+  }
+
+  function handleTutorialSkip() {
+    setPage("select");
+  }
+
+  if (!initChecked) {
+    return (
+      <main className="game-shell">
+        <section className="hero">
+          <p>{game.id} · H5Game · Port {game.port}</p>
+          <h1>{game.title}</h1>
+          <span>{game.tagline}</span>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="game-shell">
       <section className="hero">
@@ -41,13 +75,23 @@ function App() {
         <span>{game.tagline}</span>
       </section>
 
-      {page === "select" ? (
+      {page === "tutorial" && (
+        <Tutorial
+          onComplete={handleTutorialComplete}
+          onSkip={handleTutorialSkip}
+        />
+      )}
+
+      {page === "select" && (
         <SongSelect
           selectedSongId={selectedSongId}
           onSelectSong={handleSelectSong}
           onStartPlay={handleStartPlay}
+          onStartTutorial={handleStartTutorial}
         />
-      ) : (
+      )}
+
+      {page === "play" && (
         <GamePlay song={selectedSong} onBack={handleBackToSelect} />
       )}
     </main>

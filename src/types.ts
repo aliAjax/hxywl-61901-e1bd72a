@@ -13,4 +13,4 @@ export interface Song {
   previewPattern: number[];
 }
 
-export type PageType = "select" | "play";
+export type PageType = "select" | "play" | "tutorial";

@@ -870,3 +870,190 @@ button {
     font-size: 28px;
   }
 }
+
+.tutorial-play {
+  position: relative;
+}
+
+.tutorial-tip-card {
+  margin-top: 16px;
+  padding: 18px 22px;
+  border-radius: 14px;
+  background: linear-gradient(
+    135deg,
+    rgba(79, 70, 229, 0.18),
+    rgba(6, 182, 212, 0.15)
+  );
+  border: 1px solid rgba(79, 70, 229, 0.45);
+  box-shadow: 0 8px 30px rgba(79, 70, 229, 0.18);
+  position: relative;
+  animation: tipSlide 400ms ease-out;
+}
+
+@keyframes tipSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tutorial-step-num {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.5);
+  color: #e0e7ff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.tutorial-tip-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.tutorial-tip-desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #cbd5e1;
+}
+
+.tutorial-tip-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.tutorial-next-btn {
+  padding: 7px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.6);
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 150ms ease;
+}
+
+.tutorial-next-btn:hover {
+  background: rgba(79, 70, 229, 0.35);
+  border-color: rgba(79, 70, 229, 0.6);
+  color: #fff;
+}
+
+.track.highlighted {
+  background: rgba(251, 191, 36, 0.08);
+  animation: trackGlow 1.2s ease-in-out infinite;
+}
+
+@keyframes trackGlow {
+  0%,
+  100% {
+    box-shadow: inset 0 0 30px rgba(251, 191, 36, 0.15);
+  }
+  50% {
+    box-shadow: inset 0 0 60px rgba(251, 191, 36, 0.35);
+  }
+}
+
+.hit-zone.highlighted {
+  animation: hitZonePulse 1s ease-in-out infinite;
+  background: rgba(251, 191, 36, 0.18);
+}
+
+@keyframes hitZonePulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+
+.track-btn.highlighted-btn {
+  animation: btnPulse 1s ease-in-out infinite;
+}
+
+@keyframes btnPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.tutorial-result {
+  position: relative;
+}
+
+.tutorial-result-badge {
+  font-size: 56px;
+  line-height: 1;
+  margin-bottom: 8px;
+  animation: badgeBounce 1s ease-in-out infinite;
+}
+
+@keyframes badgeBounce {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(4deg);
+  }
+}
+
+.tutorial-result-subtitle {
+  margin: 0 0 20px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.tutorial-replay-btn {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid rgba(79, 70, 229, 0.4);
+  border-radius: 10px;
+  background: rgba(79, 70, 229, 0.1);
+  color: #c7d2fe;
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 10px;
+  transition: all 150ms ease;
+}
+
+.tutorial-replay-btn:hover {
+  background: rgba(79, 70, 229, 0.22);
+  border-color: rgba(79, 70, 229, 0.65);
+  color: #e0e7ff;
+}
+
+@media (max-width: 820px) {
+  .tutorial-tip-card {
+    padding: 14px 16px;
+  }
+
+  .tutorial-tip-title {
+    font-size: 16px;
+  }
+
+  .tutorial-tip-desc {
+    font-size: 13px;
+  }
+
+  .tutorial-result-badge {
+    font-size: 44px;
+  }
+}

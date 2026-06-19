@@ -105,3 +105,112 @@ export function saveSongBestScore(songId: string, score: number): void {
     localStorage.setItem(`rhythm-best-${songId}`, String(score));
   }
 }
+
+export const TUTORIAL_KEY = "rhythm-tutorial-completed";
+
+export function isTutorialCompleted(): boolean {
+  return localStorage.getItem(TUTORIAL_KEY) === "1";
+}
+
+export function markTutorialCompleted(): void {
+  localStorage.setItem(TUTORIAL_KEY, "1");
+}
+
+export function resetTutorialStatus(): void {
+  localStorage.removeItem(TUTORIAL_KEY);
+}
+
+export interface TutorialStep {
+  id: number;
+  title: string;
+  description: string;
+  highlightTrack?: number;
+  autoSpawnPattern?: number[];
+  autoSpawnInterval?: number;
+  requireUserAction?: boolean;
+  waitMs?: number;
+  forceMiss?: boolean;
+}
+
+export const tutorialSong: Song = {
+  id: "tutorial-song",
+  title: "新手练习曲",
+  artist: "教学模式",
+  bpm: 90,
+  difficulty: "easy",
+  difficultyLevel: 1,
+  duration: 30,
+  coverColor: "#4f46e5",
+  accentColor: "#06b6d4",
+  previewPattern: [0, 1, 2, 3],
+};
+
+export const tutorialSteps: TutorialStep[] = [
+  {
+    id: 1,
+    title: "欢迎来到节奏点击！",
+    description: "本教学将带你了解游戏玩法，约 1 分钟完成。观察上方四条彩色轨道，音符会从顶部落下。",
+    waitMs: 4000,
+  },
+  {
+    id: 2,
+    title: "音符下落演示",
+    description: "看！音符从上方缓缓落下，目标是在它们到达底部判定线时准确按下对应按键。",
+    autoSpawnPattern: [0, 1, 2, 3, 0, 1, 2, 3],
+    autoSpawnInterval: 600,
+    waitMs: 6000,
+  },
+  {
+    id: 3,
+    title: "按键操作说明",
+    description: "四条轨道分别对应键盘 D（左一）、F（左二）、J（右二）、K（右一），或直接点击下方按钮。",
+    waitMs: 4000,
+  },
+  {
+    id: 4,
+    title: "Perfect 完美判定",
+    description: "在音符正中心到达判定线时按下，获得 PERFECT！得分最高 +300，连击中加成更多。请按下高亮轨道的按键试试！",
+    highlightTrack: 0,
+    autoSpawnPattern: [0],
+    autoSpawnInterval: 1500,
+    requireUserAction: true,
+  },
+  {
+    id: 5,
+    title: "Good 良好判定",
+    description: "时机稍有偏差会判定为 GOOD，得分 +150。继续尝试！",
+    highlightTrack: 1,
+    autoSpawnPattern: [1],
+    autoSpawnInterval: 1500,
+    requireUserAction: true,
+  },
+  {
+    id: 6,
+    title: "连击 Combo 系统",
+    description: "连续命中会累积连击，连击越高分数加成越大。现在连续命中 3 次试试！",
+    autoSpawnPattern: [2, 3, 0],
+    autoSpawnInterval: 1100,
+    requireUserAction: true,
+  },
+  {
+    id: 7,
+    title: "Miss 漏击与连击中断",
+    description: "如果音符飞过判定线未点击则判定 MISS，连击会清零！注意看下方这个音符——故意漏掉它看看。",
+    autoSpawnPattern: [1],
+    autoSpawnInterval: 2000,
+    forceMiss: true,
+    waitMs: 4000,
+  },
+  {
+    id: 8,
+    title: "结算画面含义",
+    description: "演奏结束后会显示：分数、Perfect/Good/Miss 数量、最大连击数。达成新纪录会有特别提示！",
+    waitMs: 4000,
+  },
+  {
+    id: 9,
+    title: "教学完成！",
+    description: "恭喜！你已掌握所有基础玩法，去选择一首歌正式开始挑战吧！",
+    waitMs: 3000,
+  },
+];

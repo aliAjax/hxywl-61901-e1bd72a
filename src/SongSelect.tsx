@@ -12,12 +12,14 @@ interface SongSelectProps {
   selectedSongId: string | null;
   onSelectSong: (song: Song) => void;
   onStartPlay: (song: Song) => void;
+  onStartTutorial: () => void;
 }
 
 export default function SongSelect({
   selectedSongId,
   onSelectSong,
   onStartPlay,
+  onStartTutorial,
 }: SongSelectProps) {
   const [previewingSongId, setPreviewingSongId] = useState<string | null>(null);
   const [previewStep, setPreviewStep] = useState(-1);
@@ -244,6 +246,13 @@ export default function SongSelect({
               onClick={() => handlePreview(selectedSong)}
             >
               {previewingSongId === selectedSong.id ? "暂停试听" : "试听歌曲"}
+            </button>
+
+            <button
+              className="tutorial-replay-btn"
+              onClick={onStartTutorial}
+            >
+              📘 重新观看教学
             </button>
           </div>
         </div>
