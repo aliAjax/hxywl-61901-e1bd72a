@@ -304,6 +304,8 @@ export class ChartPlayer {
         this.applyJudge(judge, track);
         this.playHitSound(track);
       }
+    } else {
+      this.applyJudge("miss", track);
     }
   }
 

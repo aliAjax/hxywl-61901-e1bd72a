@@ -248,6 +248,23 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [started, finished]);
 
+  useEffect(() => {
+    const handleTrackPointer = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      const trackEl = target?.closest<HTMLElement>("[data-track-index]");
+      if (!trackEl) return;
+      e.preventDefault();
+      const track = Number(trackEl.dataset.trackIndex);
+      if (Number.isInteger(track)) {
+        judgeNote(track);
+      }
+    };
+
+    window.addEventListener("pointerdown", handleTrackPointer);
+    return () => window.removeEventListener("pointerdown", handleTrackPointer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [started, finished]);
+
   const progressPercent = Math.min(
     100,
     (elapsed / (song.duration * 1000)) * 100
@@ -316,6 +333,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
               key={trackIdx}
               className={`track ${pressedTracks[trackIdx] ? "pressed" : ""}`}
               style={{ borderColor: TRACK_COLORS[trackIdx] + "55" }}
+              data-track-index={trackIdx}
             >
               {Array.from(activeNotes.values())
                 .filter((n) => n.track === trackIdx && !n.judged)
@@ -389,11 +407,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
                   ? "0 0 30px " + color
                   : "none",
               }}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                judgeNote(idx);
-              }}
-              onMouseDown={() => judgeNote(idx)}
+              data-track-index={idx}
               disabled={!isPlaying}
             >
               {label}
