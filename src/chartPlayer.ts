@@ -213,6 +213,31 @@ export class ChartPlayer {
     }
   }
 
+  playMissSound() {
+    const ctx = this.ensureAudioCtx();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
+      filter.type = "lowpass";
+      filter.frequency.value = 400;
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.start(now);
+      osc.stop(now + 0.13);
+    } catch {
+      // silent
+    }
+  }
+
   private applyJudge(judge: JudgeType, track: number) {
     if (!judge) return;
     if (judge === "perfect") {
@@ -230,6 +255,7 @@ export class ChartPlayer {
     } else if (judge === "miss") {
       this.stats.combo = 0;
       this.stats.missCount += 1;
+      this.playMissSound();
     }
     this.cb.onStatsChange({ ...this.stats });
     this.cb.onJudge(judge, track);

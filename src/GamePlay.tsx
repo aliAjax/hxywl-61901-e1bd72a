@@ -35,6 +35,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
   const [missCount, setMissCount] = useState(0);
   const [lastJudge, setLastJudge] = useState<JudgeType>(null);
   const [lastJudgeTrack, setLastJudgeTrack] = useState(0);
+  const [judgeKey, setJudgeKey] = useState(0);
   const [paused, setPaused] = useState(false);
   const [finished, setFinished] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -90,9 +91,11 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
       onJudge: (judge: JudgeType, track: number) => {
         setLastJudge(judge);
         setLastJudgeTrack(track);
+        setJudgeKey((k) => k + 1);
+        const currentJudge = judge;
         setTimeout(() => {
-          setLastJudge((cur) => (cur === judge ? null : cur));
-        }, 300);
+          setLastJudge((cur) => (cur === currentJudge ? null : cur));
+        }, 320);
       },
       onStatsChange: (stats: GameStats) => {
         setScore(Math.floor(stats.score));
@@ -152,6 +155,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
     setGoodCount(0);
     setMissCount(0);
     setLastJudge(null);
+    setJudgeKey(0);
     finalStatsRef.current = null;
     playerRef.current?.start();
   }
@@ -188,6 +192,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
     setGoodCount(0);
     setMissCount(0);
     setLastJudge(null);
+    setJudgeKey(0);
     finalStatsRef.current = null;
     playerRef.current?.restart();
   }
@@ -343,7 +348,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
           {lastJudge && (
             <div
               className={`judge-display judge-${lastJudge}`}
-              key={lastJudge + "-" + lastJudgeTrack + "-" + Math.random()}
+              key={lastJudge + "-" + lastJudgeTrack + "-" + judgeKey}
             >
               {lastJudge === "perfect"
                 ? "PERFECT!"

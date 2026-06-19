@@ -5,7 +5,30 @@ const TRACK_COUNT = 4;
 
 const MELODY_SCALE = [261.63, 293.66, 329.63, 349.23, 392.0, 440.0, 493.88, 523.25];
 
+class SeededRandom {
+  private seed: number;
+
+  constructor(seedString: string) {
+    let hash = 2166136261;
+    for (let i = 0; i < seedString.length; i++) {
+      hash ^= seedString.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    this.seed = hash >>> 0;
+  }
+
+  next(): number {
+    this.seed = (this.seed * 1664525 + 1013904223) >>> 0;
+    return this.seed / 4294967296;
+  }
+
+  nextInt(min: number, max: number): number {
+    return Math.floor(this.next() * (max - min + 1)) + min;
+  }
+}
+
 function buildChartForSong(song: Song): Chart {
+  const rng = new SeededRandom(song.id);
   const notes: ChartNote[] = [];
   const audioBeats: Chart["audioBeats"] = [];
   const beatMs = 60000 / song.bpm;
@@ -46,18 +69,18 @@ function buildChartForSong(song: Song): Chart {
     const onMediumBeat = subdivision >= 4 && subIndex % 2 === 0;
     let spawnNote = false;
     if (onStrongBeat) {
-      spawnNote = Math.random() < noteDensity * 1.3;
+      spawnNote = rng.next() < noteDensity * 1.3;
     } else if (onMediumBeat) {
-      spawnNote = Math.random() < noteDensity * 0.8;
+      spawnNote = rng.next() < noteDensity * 0.8;
     } else {
-      spawnNote = Math.random() < noteDensity * 0.35;
+      spawnNote = rng.next() < noteDensity * 0.35;
     }
 
     if (spawnNote) {
       const baseTrack = pattern[Math.floor(noteId / 2) % pattern.length];
       let track = baseTrack;
-      if (!onStrongBeat && Math.random() < 0.3) {
-        track = (track + 1 + Math.floor(Math.random() * 2)) % TRACK_COUNT;
+      if (!onStrongBeat && rng.next() < 0.3) {
+        track = (track + 1 + rng.nextInt(0, 1)) % TRACK_COUNT;
       }
       notes.push({
         id: noteId++,
@@ -65,9 +88,9 @@ function buildChartForSong(song: Song): Chart {
         track,
       });
 
-      if (Math.random() < doubleChance && onStrongBeat) {
+      if (rng.next() < doubleChance && onStrongBeat) {
         const otherTracks = [0, 1, 2, 3].filter((tr) => tr !== track);
-        const otherTrack = otherTracks[Math.floor(Math.random() * otherTracks.length)];
+        const otherTrack = otherTracks[rng.nextInt(0, otherTracks.length - 1)];
         notes.push({
           id: noteId++,
           time: Math.round(t),
@@ -109,3 +132,4 @@ export function getChartForSong(songId: string): Chart {
   chartCache[songId] = chart;
   return chart;
 }
+
