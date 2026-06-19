@@ -235,9 +235,11 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
   }, [playing, combo]);
 
   useEffect(() => {
-    if (finished && score > 0) {
+    if (finished) {
       const finalScore = Math.floor(score);
-      saveSongBestScore(song.id, finalScore);
+      if (finalScore > 0) {
+        saveSongBestScore(song.id, finalScore);
+      }
       savePlayRecord({
         songId: song.id,
         score: finalScore,
