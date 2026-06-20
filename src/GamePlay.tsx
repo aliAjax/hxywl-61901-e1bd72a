@@ -99,6 +99,9 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     tapPerfectCount: 0, tapGoodCount: 0, tapMissCount: 0,
     longPerfectCount: 0, longGoodCount: 0, longMissCount: 0,
   });
+  const showBestComparisonRef = useRef(showBestComparison);
+  const bestPlaySummaryRef = useRef<BestPlaySummary | null>(bestPlaySummary);
+  const comparisonBaselineRef = useRef<BestPlaySummary | null>(null);
 
   const isPractice = !!practiceSegment;
   const bestScore = useMemo(() => getSongBestScore(song.id, difficulty), [song.id, difficulty]);
@@ -108,8 +111,18 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
   const CHECKPOINT_INTERVAL_PERCENT = 5;
 
   useEffect(() => {
+    showBestComparisonRef.current = showBestComparison;
+  }, [showBestComparison]);
+
+  useEffect(() => {
+    bestPlaySummaryRef.current = bestPlaySummary;
+  }, [bestPlaySummary]);
+
+  useEffect(() => {
     const summary = getBestPlaySummary(song.id, difficulty);
     setBestPlaySummary(summary);
+    bestPlaySummaryRef.current = summary;
+    comparisonBaselineRef.current = summary;
   }, [song.id, difficulty]);
 
   useEffect(() => {
@@ -263,9 +276,9 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
           };
           setCheckpoints((prev) => [...prev, checkpoint]);
         }
-        if (showBestComparison && bestPlaySummary && bestPlaySummary.checkpoints.length > 0) {
+        if (showBestComparisonRef.current && bestPlaySummaryRef.current && bestPlaySummaryRef.current.checkpoints.length > 0) {
           const comparison = computeLiveComparison(
-            bestPlaySummary,
+            bestPlaySummaryRef.current,
             currentStatsRef.current,
             progress
           );
@@ -358,7 +371,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
         });
         const now = Date.now();
         if (checkpoints.length > 0 || finalScore > 0) {
-          const saved = saveBestPlaySummary({
+          saveBestPlaySummary({
             songId: song.id,
             difficulty,
             score: Math.floor(finalScore),
@@ -375,9 +388,6 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
             checkpoints,
             completedAt: now,
           });
-          if (saved) {
-            setBestPlaySummary(getBestPlaySummary(song.id, difficulty));
-          }
         }
       }
       setSavedRecord(true);
@@ -611,7 +621,8 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     : 0;
 
   const comparisonAnalysis = useMemo(() => {
-    if (!bestPlaySummary || isPractice) return null;
+    const baseline = comparisonBaselineRef.current;
+    if (!baseline || isPractice) return null;
     const calcAcc = (p: number, g: number, m: number) => {
       const total = p + g + m;
       if (total === 0) return 0;
@@ -619,40 +630,40 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     };
     const tapAccCur = calcAcc(tapPerfectCount, tapGoodCount, tapMissCount);
     const tapAccBest = calcAcc(
-      bestPlaySummary.tapPerfectCount,
-      bestPlaySummary.tapGoodCount,
-      bestPlaySummary.tapMissCount
+      baseline.tapPerfectCount,
+      baseline.tapGoodCount,
+      baseline.tapMissCount
     );
     const longAccCur = calcAcc(longPerfectCount, longGoodCount, longMissCount);
     const longAccBest = calcAcc(
-      bestPlaySummary.longPerfectCount,
-      bestPlaySummary.longGoodCount,
-      bestPlaySummary.longMissCount
+      baseline.longPerfectCount,
+      baseline.longGoodCount,
+      baseline.longMissCount
     );
     const overallAccCur = calcAcc(perfectCount, goodCount, missCount);
     const overallAccBest = calcAcc(
-      bestPlaySummary.perfectCount,
-      bestPlaySummary.goodCount,
-      bestPlaySummary.missCount
+      baseline.perfectCount,
+      baseline.goodCount,
+      baseline.missCount
     );
-    const scoreDiff = score - bestPlaySummary.score;
-    const comboDiff = maxCombo - bestPlaySummary.maxCombo;
+    const scoreDiff = score - baseline.score;
+    const comboDiff = maxCombo - baseline.maxCombo;
     return {
       tap: {
         current: tapAccCur,
         best: tapAccBest,
         diff: tapAccCur - tapAccBest,
-        perfectDiff: tapPerfectCount - bestPlaySummary.tapPerfectCount,
-        goodDiff: tapGoodCount - bestPlaySummary.tapGoodCount,
-        missDiff: tapMissCount - bestPlaySummary.tapMissCount,
+        perfectDiff: tapPerfectCount - baseline.tapPerfectCount,
+        goodDiff: tapGoodCount - baseline.tapGoodCount,
+        missDiff: tapMissCount - baseline.tapMissCount,
       },
       long: {
         current: longAccCur,
         best: longAccBest,
         diff: longAccCur - longAccBest,
-        perfectDiff: longPerfectCount - bestPlaySummary.longPerfectCount,
-        goodDiff: longGoodCount - bestPlaySummary.longGoodCount,
-        missDiff: longMissCount - bestPlaySummary.longMissCount,
+        perfectDiff: longPerfectCount - baseline.longPerfectCount,
+        goodDiff: longGoodCount - baseline.longGoodCount,
+        missDiff: longMissCount - baseline.longMissCount,
       },
       overall: {
         current: overallAccCur,
@@ -663,7 +674,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
       comboDiff,
     };
   }, [
-    bestPlaySummary, isPractice,
+    isPractice, finished,
     tapPerfectCount, tapGoodCount, tapMissCount,
     longPerfectCount, longGoodCount, longMissCount,
     perfectCount, goodCount, missCount,
