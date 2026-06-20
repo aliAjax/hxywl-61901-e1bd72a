@@ -32,7 +32,7 @@ export class AudioSyncEngine {
   private state: SyncState = "idle";
 
   private wallBaseTime = 0;
-  private audioBaseTime = 0;
+  private audioBaseTime: number | null = null;
   private accumulatedPauseTime = 0;
   private pauseWallSnapshot = 0;
   private pausedElapsedSnapshot = 0;
@@ -96,9 +96,15 @@ export class AudioSyncEngine {
     this.audioCtx = ctx;
     if (ctx) {
       try {
-        this.audioBaseTime = ctx.currentTime * 1000;
+        const audioNow = ctx.currentTime * 1000;
+        if (this.state === "playing") {
+          const wallElapsed = this.nowWall() - this.wallBaseTime - this.accumulatedPauseTime;
+          this.audioBaseTime = audioNow - wallElapsed;
+        } else {
+          this.audioBaseTime = audioNow;
+        }
       } catch {
-        this.audioBaseTime = 0;
+        this.audioBaseTime = null;
       }
     }
   }
@@ -149,9 +155,9 @@ export class AudioSyncEngine {
   private nowAudio(): number | null {
     if (!this.audioCtx) return null;
     try {
-      if (this.audioCtx.state === "closed") return null;
+      if (this.audioCtx.state !== "running") return null;
       const t = this.audioCtx.currentTime * 1000;
-      if (t <= 0) return null;
+      if (t < 0) return null;
       return t;
     } catch {
       return null;
@@ -180,7 +186,7 @@ export class AudioSyncEngine {
     const audioNow = this.nowAudio();
     if (audioNow === null) return null;
 
-    if (this.audioBaseTime === 0) {
+    if (this.audioBaseTime === null) {
       if (this.state === "playing") {
         const wall = this.nowWall();
         const wallElapsed = wall - this.wallBaseTime - this.accumulatedPauseTime;
@@ -306,7 +312,7 @@ export class AudioSyncEngine {
       try {
         this.audioBaseTime = this.audioCtx.currentTime * 1000;
       } catch {
-        this.audioBaseTime = 0;
+        this.audioBaseTime = null;
       }
     }
 
@@ -316,11 +322,12 @@ export class AudioSyncEngine {
 
   pause() {
     if (this.state !== "playing") return;
+    const elapsed = this.getElapsedMs();
     this.state = "paused";
     const now = this.nowWall();
     this.pauseWallSnapshot = now;
-    this.pausedElapsedSnapshot = now - this.wallBaseTime - this.accumulatedPauseTime;
-    this.lastKnownAudioElapsed = this.getAudioReferencedElapsedMs() ?? this.pausedElapsedSnapshot;
+    this.pausedElapsedSnapshot = elapsed;
+    this.lastKnownAudioElapsed = elapsed;
     this.emitStateChange();
   }
 
@@ -332,7 +339,7 @@ export class AudioSyncEngine {
     this.accumulatedPauseTime += pauseDuration;
     this.lastFrameWallTime = now;
 
-    if (this.audioCtx && this.audioBaseTime > 0) {
+    if (this.audioCtx && this.audioBaseTime !== null) {
       try {
         const audioNow = this.audioCtx.currentTime * 1000;
         this.audioBaseTime = audioNow - this.pausedElapsedSnapshot;
@@ -372,6 +379,7 @@ export class AudioSyncEngine {
     this.pageHiddenAt = null;
     this.lastKnownAudioElapsed = 0;
     this.pausedElapsedSnapshot = 0;
+    this.audioBaseTime = null;
   }
 
   private attachVisibilityHandler() {

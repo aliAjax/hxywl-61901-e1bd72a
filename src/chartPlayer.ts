@@ -120,11 +120,6 @@ export class ChartPlayer {
           cancelAnimationFrame(this.rafId);
           this.rafId = null;
         }
-      } else if (state === "playing") {
-        if (this.rafId === null) {
-          this.lastFrameTimestamp = performance.now();
-          this.rafId = requestAnimationFrame(this.mainLoop);
-        }
       }
       if (this.cb.onStateChange) {
         this.cb.onStateChange(state);
@@ -194,7 +189,9 @@ export class ChartPlayer {
         this.syncEngine.attachAudioContext(this.audioCtx);
       }
       if (this.audioCtx.state === "suspended") {
-        this.audioCtx.resume().catch(() => {});
+        this.audioCtx.resume()
+          .then(() => this.syncEngine.attachAudioContext(this.audioCtx))
+          .catch(() => {});
       }
       return this.audioCtx;
     } catch {
@@ -203,8 +200,8 @@ export class ChartPlayer {
   }
 
   private playSimulatedBeat(freq: number, type: string, durationMs = 160) {
-    const ctx = this.ensureAudioCtx();
-    if (!ctx) return;
+    const ctx = this.audioCtx;
+    if (!ctx || ctx.state !== "running") return;
     try {
       const now = ctx.currentTime;
       const osc = ctx.createOscillator();
@@ -272,8 +269,8 @@ export class ChartPlayer {
   }
 
   playHitSound(track: number) {
-    const ctx = this.ensureAudioCtx();
-    if (!ctx) return;
+    const ctx = this.audioCtx;
+    if (!ctx || ctx.state !== "running") return;
     try {
       const now = ctx.currentTime;
       const osc = ctx.createOscillator();
@@ -293,8 +290,8 @@ export class ChartPlayer {
   }
 
   playMissSound() {
-    const ctx = this.ensureAudioCtx();
-    if (!ctx) return;
+    const ctx = this.audioCtx;
+    if (!ctx || ctx.state !== "running") return;
     try {
       const now = ctx.currentTime;
       const osc = ctx.createOscillator();
@@ -681,6 +678,9 @@ export class ChartPlayer {
     this.lastFrameTimestamp = performance.now();
     this.cb.onStatsChange({ ...this.stats });
     this.startDiagnosticsReporting();
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+    }
     this.rafId = requestAnimationFrame(this.mainLoop);
   }
 
@@ -697,6 +697,9 @@ export class ChartPlayer {
     if (!this.syncEngine.isPaused()) return;
     this.syncEngine.resume();
     this.lastFrameTimestamp = performance.now();
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+    }
     this.rafId = requestAnimationFrame(this.mainLoop);
   }
 
