@@ -175,3 +175,17 @@ export interface LiveComparisonState {
   isScoreBehind: boolean;
   isComboBehind: boolean;
 }
+
+export type ButtonLayout = "compact" | "spacious";
+
+export interface KeyBindings {
+  track0: string;
+  track1: string;
+  track2: string;
+  track3: string;
+}
+
+export interface ControlSettings {
+  keyBindings: KeyBindings;
+  buttonLayout: ButtonLayout;
+}

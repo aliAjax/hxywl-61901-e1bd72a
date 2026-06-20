@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import type { KeyBindings, ButtonLayout } from "./types";
 import {
   getCalibrationOffset,
   saveCalibrationOffset,
@@ -8,6 +9,13 @@ import {
   getAllSongCalibrations,
   resetAllSongCalibrations,
   getEffectiveCalibration,
+  getKeyBindings,
+  saveKeyBindings,
+  getButtonLayout,
+  saveButtonLayout,
+  validateKeyBinding,
+  DEFAULT_KEY_BINDINGS,
+  resetControlSettings,
 } from "./songs";
 import { resourceManager } from "./resourceManager";
 
@@ -28,6 +36,8 @@ interface SettingItem {
   danger?: boolean;
 }
 
+const TRACK_COLORS = ["#4f46e5", "#06b6d4", "#f97316", "#ec4899"];
+
 export default function Settings({
   onBack,
   onOpenCalibration,
@@ -41,6 +51,115 @@ export default function Settings({
   const songCalibrationCount = Object.keys(getAllSongCalibrations()).length;
   const tutorialDone = isTutorialCompleted();
   const version = resourceManager.getVersion();
+
+  const [keyBindings, setKeyBindings] = useState<KeyBindings>(getKeyBindings());
+  const [buttonLayout, setButtonLayout] = useState<ButtonLayout>(getButtonLayout());
+  const [editingTrack, setEditingTrack] = useState<number | null>(null);
+  const [bindingError, setBindingError] = useState<string | null>(null);
+  const inputRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  useEffect(() => {
+    if (editingTrack !== null && inputRefs.current[editingTrack]) {
+      inputRefs.current[editingTrack]?.focus();
+    }
+  }, [editingTrack]);
+
+  const handleKeyBindingChange = (trackIndex: number, key: string) => {
+    const newBindings = { ...keyBindings };
+    const trackKey = `track${trackIndex}` as keyof KeyBindings;
+    newBindings[trackKey] = key;
+    setKeyBindings(newBindings);
+    setBindingError(null);
+  };
+
+  const handleKeyBindingKeyDown = (e: React.KeyboardEvent, trackIndex: number) => {
+    if (editingTrack !== trackIndex) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    let key = e.key;
+
+    if (key === "Escape") {
+      setEditingTrack(null);
+      setBindingError(null);
+      setKeyBindings(getKeyBindings());
+      return;
+    }
+
+    if (key === "Enter" || key === "Tab") {
+      const trackKey = `track${trackIndex}` as keyof KeyBindings;
+      const currentKey = keyBindings[trackKey];
+      const validation = validateKeyBinding(currentKey, keyBindings, trackIndex);
+
+      if (!validation.valid) {
+        setBindingError(validation.error || "无效按键");
+        return;
+      }
+
+      saveKeyBindings(keyBindings);
+      setEditingTrack(null);
+      setBindingError(null);
+      showMessage("按键绑定已保存");
+      setTick((t) => t + 1);
+      return;
+    }
+
+    let displayKey = key;
+    if (key === " ") {
+      displayKey = "space";
+    } else if (key.length === 1) {
+      displayKey = key.toLowerCase();
+    } else {
+      displayKey = key.toLowerCase();
+    }
+
+    const validation = validateKeyBinding(displayKey, keyBindings, trackIndex);
+    if (!validation.valid) {
+      setBindingError(validation.error || "无效按键");
+      return;
+    }
+
+    setBindingError(null);
+    handleKeyBindingChange(trackIndex, displayKey);
+  };
+
+  const handleKeyBindingBlur = (trackIndex: number) => {
+    if (editingTrack !== trackIndex) return;
+
+    const trackKey = `track${trackIndex}` as keyof KeyBindings;
+    const currentKey = keyBindings[trackKey];
+    const validation = validateKeyBinding(currentKey, keyBindings, trackIndex);
+
+    if (!validation.valid) {
+      setBindingError(validation.error || "无效按键");
+      return;
+    }
+
+    saveKeyBindings(keyBindings);
+    setEditingTrack(null);
+    setBindingError(null);
+    showMessage("按键绑定已保存");
+    setTick((t) => t + 1);
+  };
+
+  const handleResetKeyBindings = () => {
+    if (window.confirm("确定要重置为默认按键 D/F/J/K 吗？")) {
+      setKeyBindings({ ...DEFAULT_KEY_BINDINGS });
+      saveKeyBindings({ ...DEFAULT_KEY_BINDINGS });
+      setEditingTrack(null);
+      setBindingError(null);
+      showMessage("已重置为默认按键 D/F/J/K");
+      setTick((t) => t + 1);
+    }
+  };
+
+  const handleLayoutChange = (layout: ButtonLayout) => {
+    setButtonLayout(layout);
+    saveButtonLayout(layout);
+    showMessage(layout === "compact" ? "已切换为紧凑布局" : "已切换为宽松布局");
+    setTick((t) => t + 1);
+  };
 
   const formatOffset = (ms: number): string => {
     if (ms === 0) return "0 ms";
@@ -207,6 +326,107 @@ export default function Settings({
       )}
 
       <div className="settings-list">
+        <div className="settings-item keybindings-item">
+          <div className="settings-item-icon">⌨️</div>
+          <div className="settings-item-body">
+            <div className="settings-item-title">按键绑定</div>
+            <div className="settings-item-desc">自定义四条轨道的键盘按键，点击按键后输入新的按键。</div>
+            <div className="keybindings-grid">
+              {[0, 1, 2, 3].map((trackIdx) => {
+                const trackKey = `track${trackIdx}` as keyof KeyBindings;
+                const isEditing = editingTrack === trackIdx;
+                return (
+                  <div key={trackIdx} className="keybinding-item">
+                    <div
+                      className="keybinding-track-label"
+                      style={{ color: TRACK_COLORS[trackIdx] }}
+                    >
+                      轨道 {trackIdx + 1}
+                    </div>
+                    <button
+                      className={
+                        "keybinding-btn " +
+                        (isEditing ? "editing " : "") +
+                        (bindingError && isEditing ? "error " : "")
+                      }
+                      style={{
+                        borderColor: TRACK_COLORS[trackIdx],
+                        boxShadow: isEditing ? `0 0 16px ${TRACK_COLORS[trackIdx]}80` : "none",
+                      }}
+                      onClick={() => setEditingTrack(trackIdx)}
+                      onKeyDown={(e) => handleKeyBindingKeyDown(e, trackIdx)}
+                      onBlur={() => handleKeyBindingBlur(trackIdx)}
+                      tabIndex={0}
+                      ref={(el) => {
+                        inputRefs.current[trackIdx] = el;
+                      }}
+                    >
+                      {keyBindings[trackKey].toUpperCase()}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {bindingError && (
+              <div className="keybinding-error">
+                ⚠️ {bindingError}
+              </div>
+            )}
+            <div className="keybinding-hint">
+              提示：点击按键后输入新按键，按 Enter 确认，按 Esc 取消
+            </div>
+            <button className="ghost-btn small-btn" onClick={handleResetKeyBindings}>
+              🔄 重置为默认 D/F/J/K
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-item layout-item">
+          <div className="settings-item-icon">📱</div>
+          <div className="settings-item-body">
+            <div className="settings-item-title">移动端按钮布局</div>
+            <div className="settings-item-desc">选择触屏按钮的排列方式，紧凑模式适合小手或大屏设备。</div>
+            <div className="layout-selector">
+              <button
+                className={
+                  "layout-option " +
+                  (buttonLayout === "compact" ? "active " : "")
+                }
+                onClick={() => handleLayoutChange("compact")}
+              >
+                <div className="layout-preview compact-preview">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="layout-preview-btn"
+                      style={{ backgroundColor: TRACK_COLORS[i] + "80" }}
+                    />
+                  ))}
+                </div>
+                <span>紧凑</span>
+              </button>
+              <button
+                className={
+                  "layout-option " +
+                  (buttonLayout === "spacious" ? "active " : "")
+                }
+                onClick={() => handleLayoutChange("spacious")}
+              >
+                <div className="layout-preview spacious-preview">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="layout-preview-btn"
+                      style={{ backgroundColor: TRACK_COLORS[i] + "80" }}
+                    />
+                  ))}
+                </div>
+                <span>宽松</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div className="settings-item calibration-item">
           <div className="settings-item-icon">🎯</div>
           <div className="settings-item-body">

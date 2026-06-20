@@ -620,6 +620,17 @@ button {
   gap: 8px;
   padding: 12px;
   background: rgba(15, 23, 42, 0.6);
+  transition: all 200ms ease;
+}
+
+.track-buttons.layout-compact {
+  gap: 4px;
+  padding: 8px;
+}
+
+.track-buttons.layout-spacious {
+  gap: 12px;
+  padding: 16px;
 }
 
 .track-btn {
@@ -632,6 +643,18 @@ button {
   transition: all 80ms ease;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+.track-buttons.layout-compact .track-btn {
+  min-height: 52px;
+  font-size: 16px;
+  border-radius: 8px;
+}
+
+.track-buttons.layout-spacious .track-btn {
+  min-height: 72px;
+  font-size: 22px;
+  border-radius: 16px;
 }
 
 .track-btn.pressed {
@@ -3112,6 +3135,155 @@ button {
   background: rgba(239, 68, 68, 0.28);
   border-color: rgba(239, 68, 68, 0.7);
   color: #fecaca;
+}
+
+.keybindings-item .settings-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.keybindings-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.keybinding-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.keybinding-track-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.keybinding-btn {
+  width: 100%;
+  height: 48px;
+  border: 2px solid #4f46e5;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.8);
+  color: #e2e8f0;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 150ms ease;
+  text-transform: uppercase;
+}
+
+.keybinding-btn:hover {
+  background: rgba(30, 41, 59, 0.9);
+  transform: translateY(-1px);
+}
+
+.keybinding-btn.editing {
+  background: rgba(79, 70, 229, 0.2);
+  animation: pulse-border 1.2s ease-in-out infinite;
+}
+
+.keybinding-btn.error {
+  border-color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(79, 70, 229, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(79, 70, 229, 0.7);
+  }
+}
+
+.keybinding-error {
+  color: #f87171;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 10px;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.keybinding-hint {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.layout-selector {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.layout-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 2px solid rgba(148, 163, 184, 0.3);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.6);
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.layout-option:hover {
+  border-color: rgba(79, 70, 229, 0.5);
+  background: rgba(30, 41, 59, 0.8);
+}
+
+.layout-option.active {
+  border-color: #4f46e5;
+  background: rgba(79, 70, 229, 0.15);
+  color: #e0e7ff;
+  box-shadow: 0 0 16px rgba(79, 70, 229, 0.2);
+}
+
+.layout-preview {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+}
+
+.layout-preview-btn {
+  width: 20px;
+  height: 28px;
+  border-radius: 4px;
+}
+
+.compact-preview {
+  gap: 3px;
+  padding: 6px;
+}
+
+.compact-preview .layout-preview-btn {
+  width: 16px;
+  height: 22px;
+  border-radius: 3px;
+}
+
+.spacious-preview {
+  gap: 6px;
+  padding: 8px;
+}
+
+.spacious-preview .layout-preview-btn {
+  width: 22px;
+  height: 30px;
+  border-radius: 5px;
 }
 
 .calibration-item {

@@ -6,8 +6,11 @@ import {
   markTutorialCompleted,
   tutorialSteps,
   tutorialSong,
+  getKeyBindings,
+  getButtonLayout,
 } from "./songs";
 import type { TutorialStep } from "./songs";
+import type { KeyBindings, ButtonLayout } from "./types";
 
 interface TutorialProps {
   onComplete: () => void;
@@ -25,10 +28,11 @@ interface Note {
 type JudgeType = "perfect" | "good" | "miss" | null;
 
 const TRACK_COUNT = 4;
-const TRACK_LABELS = ["D", "F", "J", "K"];
 const TRACK_COLORS = ["#4f46e5", "#06b6d4", "#f97316", "#ec4899"];
 
 export default function Tutorial({ onComplete, onSkip }: TutorialProps) {
+  const [keyBindings, setKeyBindings] = useState<KeyBindings>(getKeyBindings());
+  const [buttonLayout, setButtonLayout] = useState<ButtonLayout>(getButtonLayout());
   const [stepIndex, setStepIndex] = useState(0);
   const [notes, setNotes] = useState<Note[]>([]);
   const [score, setScore] = useState(0);
@@ -55,6 +59,36 @@ export default function Tutorial({ onComplete, onSkip }: TutorialProps) {
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const currentStep: TutorialStep | undefined = tutorialSteps[stepIndex];
+
+  const trackLabels = useMemo(
+    () => [keyBindings.track0, keyBindings.track1, keyBindings.track2, keyBindings.track3],
+    [keyBindings]
+  );
+
+  const currentStepDescription = useMemo(() => {
+    if (!currentStep) return "";
+    let desc = currentStep.description;
+    const keys = trackLabels.map((k) => k.toUpperCase());
+    desc = desc.replace(/D \/ F \/ J \/ K/g, `${keys[0]} / ${keys[1]} / ${keys[2]} / ${keys[3]}`);
+    return desc;
+  }, [currentStep, trackLabels]);
+
+  useEffect(() => {
+    const refreshSettings = () => {
+      setKeyBindings(getKeyBindings());
+      setButtonLayout(getButtonLayout());
+    };
+    refreshSettings();
+    const timer = window.setInterval(refreshSettings, 1000);
+    const onVisible = () => {
+      if (!document.hidden) refreshSettings();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -307,10 +341,15 @@ export default function Tutorial({ onComplete, onSkip }: TutorialProps) {
   }
 
   useEffect(() => {
+    const keyLabels = trackLabels.map((k) => k.toLowerCase());
+
     const handleKey = (e: KeyboardEvent) => {
       if (finished) return;
-      const key = e.key.toLowerCase();
-      const idx = TRACK_LABELS.findIndex((l) => l.toLowerCase() === key);
+      let key = e.key.toLowerCase();
+      if (key === " ") {
+        key = "space";
+      }
+      const idx = keyLabels.findIndex((l) => l === key);
       if (idx !== -1) {
         e.preventDefault();
         judgeNote(idx);
@@ -319,7 +358,7 @@ export default function Tutorial({ onComplete, onSkip }: TutorialProps) {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [combo, hitsNeeded, currentStep, finished]);
+  }, [combo, hitsNeeded, currentStep, finished, trackLabels]);
 
   function handleRestart() {
     if (spawnTimerRef.current) clearInterval(spawnTimerRef.current);
@@ -405,7 +444,7 @@ export default function Tutorial({ onComplete, onSkip }: TutorialProps) {
         <div className="tutorial-tip-card">
           <div className="tutorial-step-num">步骤 {stepIndex + 1}</div>
           <h3 className="tutorial-tip-title">{currentStep.title}</h3>
-          <p className="tutorial-tip-desc">{currentStep.description}</p>
+          <p className="tutorial-tip-desc">{currentStepDescription}</p>
           <div className="tutorial-tip-actions">
             <button className="tutorial-next-btn" onClick={goToNextStep}>
               下一步 →
@@ -453,7 +492,7 @@ export default function Tutorial({ onComplete, onSkip }: TutorialProps) {
                   className={`hit-zone ${highlighted ? "highlighted" : ""}`}
                   style={{ borderColor: TRACK_COLORS[trackIdx] }}
                 >
-                  <span className="hit-label">{TRACK_LABELS[trackIdx]}</span>
+                  <span className="hit-label">{trackLabels[trackIdx].toUpperCase()}</span>
                 </div>
               </div>
             );
@@ -478,8 +517,8 @@ export default function Tutorial({ onComplete, onSkip }: TutorialProps) {
         </div>
       </div>
 
-      <div className="track-buttons">
-        {TRACK_LABELS.map((label, idx) => {
+      <div className={`track-buttons layout-${buttonLayout}`}>
+        {trackLabels.map((label, idx) => {
           const color = TRACK_COLORS[idx];
           const highlighted = currentStep?.highlightTrack === idx;
           return (
@@ -516,7 +555,7 @@ export default function Tutorial({ onComplete, onSkip }: TutorialProps) {
                 e.preventDefault();
               }}
             >
-              {label}
+              {label.toUpperCase()}
             </button>
           );
         })}

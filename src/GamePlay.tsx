@@ -17,7 +17,10 @@ import {
   getBestPlaySummary,
   saveBestPlaySummary,
   computeLiveComparison,
+  getKeyBindings,
+  getButtonLayout,
 } from "./songs";
+import type { KeyBindings, ButtonLayout } from "./types";
 import {
   ChartPlayer, type SpawnedNote, HIT_ZONE_RELATIVE, type NoteVisualUpdate
 } from "./chartPlayer";
@@ -33,7 +36,6 @@ interface GamePlayProps {
 }
 
 const TRACK_COUNT = 4;
-const TRACK_LABELS = ["1", "2", "3", "4"];
 const TRACK_COLORS = ["#4f46e5", "#06b6d4", "#f97316", "#ec4899"];
 
 type Orientation = "portrait" | "landscape";
@@ -90,6 +92,8 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
 
   const [showBestComparison, setShowBestComparison] = useState(true);
   const [bestPlaySummary, setBestPlaySummary] = useState<BestPlaySummary | null>(null);
+  const [keyBindings, setKeyBindings] = useState<KeyBindings>(getKeyBindings());
+  const [buttonLayout, setButtonLayout] = useState<ButtonLayout>(getButtonLayout());
   const [checkpoints, setCheckpoints] = useState<ScoreCheckpoint[]>([]);
   const [liveComparison, setLiveComparison] = useState<LiveComparisonState | null>(null);
   const lastCheckpointPercentRef = useRef<number>(-1);
@@ -107,6 +111,11 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
   const bestScore = useMemo(() => getSongBestScore(song.id, difficulty), [song.id, difficulty]);
   const finalStatsRef = useRef<GameStats | null>(null);
   const activePointersRef = useRef<Map<number, number>>(new Map());
+
+  const trackLabels = useMemo(
+    () => [keyBindings.track0, keyBindings.track1, keyBindings.track2, keyBindings.track3],
+    [keyBindings]
+  );
 
   const CHECKPOINT_INTERVAL_PERCENT = 5;
 
@@ -506,15 +515,42 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
   }
 
   useEffect(() => {
+    const refreshSettings = () => {
+      setKeyBindings(getKeyBindings());
+      setButtonLayout(getButtonLayout());
+    };
+    refreshSettings();
+    const timer = window.setInterval(refreshSettings, 1000);
+    const onVisible = () => {
+      if (!document.hidden) refreshSettings();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  useEffect(() => {
+    const keyLabels = [
+      keyBindings.track0.toLowerCase(),
+      keyBindings.track1.toLowerCase(),
+      keyBindings.track2.toLowerCase(),
+      keyBindings.track3.toLowerCase(),
+    ];
+
     const handleKey = (e: KeyboardEvent) => {
-      const key = e.key.toLowerCase();
+      let key = e.key.toLowerCase();
+      if (key === " ") {
+        key = "space";
+      }
       if (key === "escape") {
         if (started && !finished) {
           handlePauseToggle();
         }
         return;
       }
-      if (key === " ") {
+      if (key === "space") {
         if (!started || finished) {
           e.preventDefault();
           handleStart();
@@ -529,7 +565,6 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
         setShowSyncDebug((prev) => !prev);
         return;
       }
-      const keyLabels = ["d", "f", "j", "k"];
       const idx = keyLabels.findIndex((l) => l === key);
       if (idx !== -1) {
         e.preventDefault();
@@ -540,8 +575,10 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      const key = e.key.toLowerCase();
-      const keyLabels = ["d", "f", "j", "k"];
+      let key = e.key.toLowerCase();
+      if (key === " ") {
+        key = "space";
+      }
       const idx = keyLabels.findIndex((l) => l === key);
       if (idx !== -1) {
         handleTrackRelease(idx);
@@ -555,7 +592,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
       window.removeEventListener("keyup", handleKeyUp);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [started, finished]);
+  }, [started, finished, keyBindings]);
 
   function handleTrackPointerDown(e: React.PointerEvent, track: number) {
     e.preventDefault();
@@ -854,7 +891,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
                   borderColor: TRACK_COLORS[trackIdx],
                 }}
               >
-                <span className="hit-label">{TRACK_LABELS[trackIdx]}</span>
+                <span className="hit-label">{trackLabels[trackIdx].toUpperCase()}</span>
               </div>
             </div>
           ))}
@@ -890,8 +927,8 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
         </div>
       </div>
 
-      <div className={`track-buttons ${isPortrait ? "portrait-buttons" : "landscape-buttons"}`}>
-        {TRACK_LABELS.map((label, idx) => {
+      <div className={`track-buttons ${isPortrait ? "portrait-buttons" : "landscape-buttons"} layout-${buttonLayout}`}>
+        {trackLabels.map((label, idx) => {
           const color = TRACK_COLORS[idx];
           return (
             <button
@@ -913,7 +950,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
               onPointerUp={(e) => handleTrackPointerUp(e, idx)}
               onPointerCancel={(e) => handleTrackPointerCancel(e, idx)}
             >
-              {label}
+              {label.toUpperCase()}
             </button>
           );
         })}
@@ -1078,7 +1115,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
               </label>
             )}
             <p className="start-keys">
-              <strong>触屏</strong>：按下方彩色按钮　|　<strong>键盘</strong>：D / F / J / K
+              <strong>触屏</strong>：按下方彩色按钮　|　<strong>键盘</strong>：{trackLabels.map(k => k.toUpperCase()).join(" / ")}
             </p>
             <button className="start-btn" onClick={handleStart}>
               ▶ {isPractice ? "开始练习" : "开始演奏"}

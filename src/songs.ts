@@ -1,4 +1,4 @@
-import type { Song, PlayRecord, ChartDifficulty, BestPlaySummary, ScoreCheckpoint, LiveComparisonState, GameStats } from "./types";
+import type { Song, PlayRecord, ChartDifficulty, BestPlaySummary, ScoreCheckpoint, LiveComparisonState, GameStats, KeyBindings, ButtonLayout, ControlSettings } from "./types";
 import {
   resourceManager,
   defaultSongs,
@@ -9,6 +9,9 @@ import {
   formatDuration,
   CHART_DIFFICULTIES,
   CHART_DIFFICULTY_INFO,
+  DEFAULT_KEY_BINDINGS,
+  DEFAULT_BUTTON_LAYOUT,
+  DEFAULT_CONTROL_SETTINGS,
 } from "./resourceManager";
 
 export interface TutorialStep {
@@ -255,6 +258,40 @@ export function calcRecordAccuracy(record: PlayRecord): number {
     record.goodCount,
     record.missCount
   );
+}
+
+export { DEFAULT_KEY_BINDINGS, DEFAULT_BUTTON_LAYOUT, DEFAULT_CONTROL_SETTINGS };
+
+export function getKeyBindings(): KeyBindings {
+  return resourceManager.getKeyBindings();
+}
+
+export function saveKeyBindings(keyBindings: KeyBindings): void {
+  resourceManager.saveKeyBindings(keyBindings);
+}
+
+export function getButtonLayout(): ButtonLayout {
+  return resourceManager.getButtonLayout();
+}
+
+export function saveButtonLayout(layout: ButtonLayout): void {
+  resourceManager.saveButtonLayout(layout);
+}
+
+export function getControlSettings(): ControlSettings {
+  return resourceManager.getControlSettings();
+}
+
+export function saveControlSettings(settings: ControlSettings): void {
+  resourceManager.saveControlSettings(settings);
+}
+
+export function resetControlSettings(): void {
+  resourceManager.resetControlSettings();
+}
+
+export function validateKeyBinding(key: string, currentBindings: KeyBindings, trackIndex: number): { valid: boolean; error?: string } {
+  return resourceManager.validateKeyBinding(key, currentBindings, trackIndex);
 }
 
 export const tutorialSteps: TutorialStep[] = [

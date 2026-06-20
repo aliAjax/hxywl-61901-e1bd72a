@@ -13,6 +13,9 @@ import type {
   ChartDifficultyInfo,
   BestPlaySummary,
   ScoreCheckpoint,
+  KeyBindings,
+  ButtonLayout,
+  ControlSettings,
 } from "./types";
 
 const CURRENT_SCHEMA_VERSION = 2;
@@ -55,7 +58,22 @@ const STORAGE_KEYS = {
   CALIBRATION_V2: "rhythm-calibration-data",
   TUTORIAL: "rhythm-tutorial-completed",
   FAVORITES: "rhythm-favorite-songs",
+  CONTROL_SETTINGS: "rhythm-control-settings",
 } as const;
+
+export const DEFAULT_KEY_BINDINGS: KeyBindings = {
+  track0: "d",
+  track1: "f",
+  track2: "j",
+  track3: "k",
+};
+
+export const DEFAULT_BUTTON_LAYOUT: ButtonLayout = "spacious";
+
+export const DEFAULT_CONTROL_SETTINGS: ControlSettings = {
+  keyBindings: { ...DEFAULT_KEY_BINDINGS },
+  buttonLayout: DEFAULT_BUTTON_LAYOUT,
+};
 
 const TRACK_COUNT = 4;
 const MELODY_SCALE = [261.63, 293.66, 329.63, 349.23, 392.0, 440.0, 493.88, 523.25];
@@ -927,6 +945,7 @@ class ResourceManager {
     localStorage.removeItem(STORAGE_KEYS.CALIBRATION_V2);
     localStorage.removeItem(STORAGE_KEYS.TUTORIAL);
     localStorage.removeItem(STORAGE_KEYS.FAVORITES);
+    localStorage.removeItem(STORAGE_KEYS.CONTROL_SETTINGS);
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
@@ -959,6 +978,7 @@ class ResourceManager {
     localStorage.removeItem(STORAGE_KEYS.CALIBRATION);
     localStorage.removeItem(STORAGE_KEYS.CALIBRATION_V2);
     localStorage.removeItem(STORAGE_KEYS.TUTORIAL);
+    localStorage.removeItem(STORAGE_KEYS.CONTROL_SETTINGS);
   }
 
   initialize(): ResourceInitResult {
@@ -1387,6 +1407,85 @@ class ResourceManager {
   resetFavorites(): void {
     localStorage.removeItem(STORAGE_KEYS.FAVORITES);
     this.memoryCache.favoriteSongIds = new Set();
+  }
+
+  getControlSettings(): ControlSettings {
+    const raw = localStorage.getItem(STORAGE_KEYS.CONTROL_SETTINGS);
+    try {
+      const parsed = JSON.parse(raw || "{}");
+      if (
+        parsed &&
+        parsed.keyBindings &&
+        typeof parsed.keyBindings.track0 === "string" &&
+        typeof parsed.keyBindings.track1 === "string" &&
+        typeof parsed.keyBindings.track2 === "string" &&
+        typeof parsed.keyBindings.track3 === "string" &&
+        (parsed.buttonLayout === "compact" || parsed.buttonLayout === "spacious")
+      ) {
+        return {
+          keyBindings: { ...parsed.keyBindings },
+          buttonLayout: parsed.buttonLayout,
+        };
+      }
+    } catch {
+      // ignore
+    }
+    return { ...DEFAULT_CONTROL_SETTINGS, keyBindings: { ...DEFAULT_KEY_BINDINGS } };
+  }
+
+  saveControlSettings(settings: ControlSettings): void {
+    localStorage.setItem(STORAGE_KEYS.CONTROL_SETTINGS, JSON.stringify(settings));
+  }
+
+  getKeyBindings(): KeyBindings {
+    return { ...this.getControlSettings().keyBindings };
+  }
+
+  saveKeyBindings(keyBindings: KeyBindings): void {
+    const settings = this.getControlSettings();
+    settings.keyBindings = { ...keyBindings };
+    this.saveControlSettings(settings);
+  }
+
+  getButtonLayout(): ButtonLayout {
+    return this.getControlSettings().buttonLayout;
+  }
+
+  saveButtonLayout(layout: ButtonLayout): void {
+    const settings = this.getControlSettings();
+    settings.buttonLayout = layout;
+    this.saveControlSettings(settings);
+  }
+
+  resetControlSettings(): void {
+    localStorage.removeItem(STORAGE_KEYS.CONTROL_SETTINGS);
+  }
+
+  validateKeyBinding(key: string, currentBindings: KeyBindings, trackIndex: number): { valid: boolean; error?: string } {
+    const trimmed = key.trim().toLowerCase();
+
+    if (!trimmed || trimmed.length === 0) {
+      return { valid: false, error: "按键不能为空" };
+    }
+
+    if (trimmed.length > 1 && !["space", "enter", "tab", "shift", "control", "alt", "meta", "backspace", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(trimmed)) {
+      return { valid: false, error: "请输入单个字符或特殊按键" };
+    }
+
+    const blockedKeys = ["escape", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12"];
+    if (blockedKeys.includes(trimmed)) {
+      return { valid: false, error: "该按键为系统保留键，无法绑定" };
+    }
+
+    const trackKeys = ["track0", "track1", "track2", "track3"] as const;
+    for (let i = 0; i < trackKeys.length; i++) {
+      if (i === trackIndex) continue;
+      if (currentBindings[trackKeys[i]].toLowerCase() === trimmed) {
+        return { valid: false, error: `该按键已绑定到轨道 ${i + 1}` };
+      }
+    }
+
+    return { valid: true };
   }
 }
 
