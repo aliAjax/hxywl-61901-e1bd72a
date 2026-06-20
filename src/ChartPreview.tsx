@@ -8,6 +8,7 @@ interface ChartPreviewProps {
   duration: number;
   coverColor: string;
   accentColor: string;
+  onStartPractice?: (startMs: number, endMs: number) => void;
 }
 
 const TRACK_COUNT = 4;
@@ -15,12 +16,14 @@ const TRACK_COLORS = ["#4f46e5", "#06b6d4", "#f97316", "#ec4899"];
 const DENSITY_WINDOW_MS = 2000;
 const DEFAULT_VIEWPORT_SECONDS = 30;
 const ZOOM_LEVELS = [15, 30, 60, 120];
+const PRACTICE_DURATION_MS = 20000;
 
 export default function ChartPreview({
   songId,
   duration,
   coverColor,
   accentColor,
+  onStartPractice,
 }: ChartPreviewProps) {
   const chart = useMemo<Chart>(() => getChartForSong(songId), [songId]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -213,8 +216,27 @@ export default function ChartPreview({
     return (time - viewportLeft) * pxPerMs;
   }
 
+  function handlePracticePeak(startMs: number, endMs: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    onStartPractice?.(Math.max(0, startMs), Math.min(endMs, totalDurationMs));
+  }
+
+  function handlePracticeFromHere() {
+    const centerMs = viewportLeft + viewportDurationMs / 2;
+    const startMs = Math.max(0, centerMs);
+    const endMs = Math.min(startMs + PRACTICE_DURATION_MS, totalDurationMs);
+    onStartPractice?.(startMs, endMs);
+  }
+
   const trackHeight = 28;
   const densityHeight = 36;
+
+  const practiceNotesInSegment = useMemo(() => {
+    const centerMs = viewportLeft + viewportDurationMs / 2;
+    const startMs = Math.max(0, centerMs);
+    const endMs = Math.min(startMs + PRACTICE_DURATION_MS, totalDurationMs);
+    return chart.notes.filter((n) => n.time >= startMs && n.time <= endMs).length;
+  }, [chart.notes, viewportLeft, viewportDurationMs, totalDurationMs]);
 
   return (
     <div className="chart-preview">
@@ -273,6 +295,15 @@ export default function ChartPreview({
                   }}
                 >
                   <span className="peak-label">高潮</span>
+                  {onStartPractice && (
+                    <button
+                      className="peak-practice-btn"
+                      onClick={(e) => handlePracticePeak(section.start, section.end, e)}
+                      title="练习此高潮段"
+                    >
+                      练习
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -387,6 +418,23 @@ export default function ChartPreview({
           <span className="stat-value">{peakSections.length}</span>
         </div>
       </div>
+
+      {onStartPractice && (
+        <div className="preview-practice-bar">
+          <div className="practice-bar-info">
+            <span className="practice-bar-label">分段练习</span>
+            <span className="practice-bar-desc">
+              从当前视角中心起 {Math.round(PRACTICE_DURATION_MS / 1000)}s · 含 {practiceNotesInSegment} 个音符
+            </span>
+          </div>
+          <button
+            className="practice-bar-btn"
+            onClick={handlePracticeFromHere}
+          >
+            从此处练习
+          </button>
+        </div>
+      )}
 
       <div className="preview-scrollbar">
         <div className="scrollbar-track">

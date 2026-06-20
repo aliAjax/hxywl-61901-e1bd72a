@@ -66,6 +66,11 @@ interface InternalActiveNote {
   lastUpdateElapsed: number;
 }
 
+export interface ChartPlayerOptions {
+  practiceStartMs?: number;
+  practiceEndMs?: number;
+}
+
 export class ChartPlayer {
   private song: Song;
   private chart: Chart;
@@ -83,6 +88,9 @@ export class ChartPlayer {
 
   private activeNotes = new Map<number, InternalActiveNote>();
   private trackHeldState = new Map<number, { noteId: number | null }>();
+
+  private practiceStartMs: number;
+  private practiceEndMs: number;
 
   private stats: GameStats = {
     score: 0,
@@ -104,10 +112,12 @@ export class ChartPlayer {
 
   private syncStateUnsub: (() => void) | null = null;
 
-  constructor(song: Song, callbacks: ChartPlayerCallbacks) {
+  constructor(song: Song, callbacks: ChartPlayerCallbacks, options?: ChartPlayerOptions) {
     this.song = song;
     this.chart = getChartForSong(song.id);
     this.cb = callbacks;
+    this.practiceStartMs = options?.practiceStartMs ?? 0;
+    this.practiceEndMs = options?.practiceEndMs ?? song.duration * 1000;
 
     const calibrationOffset = getCalibrationOffset();
     this.syncEngine = new AudioSyncEngine({
@@ -176,7 +186,19 @@ export class ChartPlayer {
   }
 
   getTotalDurationMs(): number {
-    return this.song.duration * 1000;
+    return this.practiceEndMs;
+  }
+
+  isPracticeMode(): boolean {
+    return this.practiceStartMs > 0 || this.practiceEndMs < this.song.duration * 1000;
+  }
+
+  getPracticeStartMs(): number {
+    return this.practiceStartMs;
+  }
+
+  getPracticeEndMs(): number {
+    return this.practiceEndMs;
   }
 
   private ensureAudioCtx(): AudioContext | null {
@@ -473,7 +495,7 @@ export class ChartPlayer {
   }
 
   private processAudioBeats(elapsed: number) {
-    const endMs = this.getTotalDurationMs();
+    const endMs = this.practiceEndMs;
     const audioElapsed = this.syncEngine.getAudioReferencedElapsedMs();
     const referenceElapsed = audioElapsed !== null && Math.abs(audioElapsed - elapsed) < RESYNC_AUDIO_BEAT_THRESHOLD_MS
       ? audioElapsed
@@ -485,7 +507,9 @@ export class ChartPlayer {
       this.chart.audioBeats[this.audioBeatCursor].time <= endMs
     ) {
       const beat = this.chart.audioBeats[this.audioBeatCursor];
-      this.playSimulatedBeat(beat.freq, beat.type);
+      if (beat.time >= this.practiceStartMs) {
+        this.playSimulatedBeat(beat.freq, beat.type);
+      }
       this.audioBeatCursor++;
     }
   }
@@ -496,7 +520,7 @@ export class ChartPlayer {
       this.chart.notes[this.chartNoteCursor].time - NOTE_FALL_MS <= elapsed
     ) {
       const note = this.chart.notes[this.chartNoteCursor];
-      if (note.time <= this.getTotalDurationMs()) {
+      if (note.time >= this.practiceStartMs && note.time <= this.practiceEndMs) {
         const progress = this.computeProgressFromElapsed(note.time, elapsed);
         const endTime = note.type === "long" && note.duration ? note.time + note.duration : undefined;
         const endProgress = endTime !== undefined
@@ -619,7 +643,7 @@ export class ChartPlayer {
   }
 
   private checkFinish(elapsed: number) {
-    const totalMs = this.getTotalDurationMs() + 2500;
+    const totalMs = this.practiceEndMs + 2500;
     if (elapsed >= totalMs) {
       this.syncEngine.finish();
       if (this.rafId !== null) {
@@ -674,7 +698,7 @@ export class ChartPlayer {
     this.ensureAudioCtx();
 
     this.resetState();
-    this.syncEngine.start();
+    this.syncEngine.start(this.practiceStartMs);
     this.lastFrameTimestamp = performance.now();
     this.cb.onStatsChange({ ...this.stats });
     this.startDiagnosticsReporting();
@@ -729,7 +753,19 @@ export class ChartPlayer {
       longMissCount: 0,
     };
     this.chartNoteCursor = 0;
+    while (
+      this.chartNoteCursor < this.chart.notes.length &&
+      this.chart.notes[this.chartNoteCursor].time < this.practiceStartMs
+    ) {
+      this.chartNoteCursor++;
+    }
     this.audioBeatCursor = 0;
+    while (
+      this.audioBeatCursor < this.chart.audioBeats.length &&
+      this.chart.audioBeats[this.audioBeatCursor].time < this.practiceStartMs
+    ) {
+      this.audioBeatCursor++;
+    }
     this.lastFrameTimestamp = 0;
     for (let i = 0; i < 4; i++) {
       this.trackHeldState.set(i, { noteId: null });

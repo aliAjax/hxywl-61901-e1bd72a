@@ -31,6 +31,11 @@ export interface PlayRecord {
   completedAt: number;
 }
 
+export interface PracticeSegment {
+  startMs: number;
+  endMs: number;
+}
+
 export type PageType = "select" | "play" | "tutorial" | "scorebook" | "settings" | "calibration";
 
 export interface ChartNote {

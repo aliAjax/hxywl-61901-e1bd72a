@@ -3277,3 +3277,111 @@ button {
     font-size: 13px;
   }
 }
+
+.peak-practice-btn {
+  pointer-events: auto;
+  padding: 2px 8px;
+  border: 1px solid rgba(249, 115, 22, 0.6);
+  border-radius: 4px;
+  background: rgba(249, 115, 22, 0.2);
+  color: #fdba74;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 150ms ease;
+  white-space: nowrap;
+}
+
+.peak-practice-btn:hover {
+  background: rgba(249, 115, 22, 0.4);
+  border-color: #f97316;
+  color: #fff;
+}
+
+.preview-practice-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(79, 70, 229, 0.08);
+  border: 1px solid rgba(79, 70, 229, 0.25);
+}
+
+.practice-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.practice-bar-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #c7d2fe;
+}
+
+.practice-bar-desc {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.practice-bar-btn {
+  padding: 4px 12px;
+  border: 1px solid rgba(79, 70, 229, 0.5);
+  border-radius: 6px;
+  background: rgba(79, 70, 229, 0.15);
+  color: #c7d2fe;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 150ms ease;
+  white-space: nowrap;
+}
+
+.practice-bar-btn:hover {
+  background: rgba(79, 70, 229, 0.3);
+  border-color: rgba(79, 70, 229, 0.75);
+  color: #e0e7ff;
+}
+
+.practice-badge-header {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.18);
+  border: 1px solid rgba(79, 70, 229, 0.45);
+  color: #c7d2fe;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.practice-start-badge {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.14);
+  border: 1px solid rgba(79, 70, 229, 0.4);
+  color: #c7d2fe;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.practice-result-badge {
+  font-size: 32px;
+  font-weight: 900;
+  color: #c7d2fe;
+  margin-bottom: 4px;
+}
+
+.practice-result-hint {
+  margin: 0 0 18px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(79, 70, 229, 0.1);
+  border: 1px solid rgba(79, 70, 229, 0.3);
+  color: #a5b4fc;
+  font-size: 12px;
+  font-weight: 600;
+}

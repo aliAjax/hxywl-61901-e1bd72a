@@ -296,21 +296,21 @@ export class AudioSyncEngine {
     }
   }
 
-  start() {
+  start(startOffsetMs = 0) {
     if (this.state === "playing") return;
 
     this.resetInternalState();
     this.state = "playing";
 
     const now = this.nowWall();
-    this.wallBaseTime = now;
+    this.wallBaseTime = now - startOffsetMs;
     this.accumulatedPauseTime = 0;
     this.pausedElapsedSnapshot = 0;
     this.lastFrameWallTime = now;
 
     if (this.audioCtx) {
       try {
-        this.audioBaseTime = this.audioCtx.currentTime * 1000;
+        this.audioBaseTime = this.audioCtx.currentTime * 1000 - startOffsetMs;
       } catch {
         this.audioBaseTime = null;
       }

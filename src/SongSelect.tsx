@@ -18,6 +18,7 @@ interface SongSelectProps {
   onStartTutorial: () => void;
   onOpenScorebook: (songId?: string | null) => void;
   onOpenSettings: () => void;
+  onStartPractice?: (songId: string, startMs: number, endMs: number) => void;
 }
 
 export default function SongSelect({
@@ -27,6 +28,7 @@ export default function SongSelect({
   onStartTutorial,
   onOpenScorebook,
   onOpenSettings,
+  onStartPractice,
 }: SongSelectProps) {
   const [previewingSongId, setPreviewingSongId] = useState<string | null>(null);
   const [previewStep, setPreviewStep] = useState(-1);
@@ -298,6 +300,7 @@ export default function SongSelect({
               duration={selectedSong.duration}
               coverColor={selectedSong.coverColor}
               accentColor={selectedSong.accentColor}
+              onStartPractice={onStartPractice ? (startMs, endMs) => onStartPractice(selectedSong.id, startMs, endMs) : undefined}
             />
 
             <button

@@ -6,7 +6,7 @@ import Tutorial from "./Tutorial";
 import ScoreBook from "./ScoreBook";
 import Calibration from "./Calibration";
 import Settings from "./Settings";
-import type { Song, PageType, ResourceInitResult } from "./types";
+import type { Song, PageType, ResourceInitResult, PracticeSegment } from "./types";
 import { songs, isTutorialCompleted } from "./songs";
 import { resourceManager } from "./resourceManager";
 
@@ -27,6 +27,7 @@ function App() {
   const [resourceWarning, setResourceWarning] = useState<string | null>(null);
   const [scorebookSongId, setScorebookSongId] = useState<string | null>(null);
   const [calibrationReturnPage, setCalibrationReturnPage] = useState<PageType>("select");
+  const [practiceSegment, setPracticeSegment] = useState<PracticeSegment | null>(null);
 
   const selectedSong = songs.find((s) => s.id === selectedSongId) || songs[0];
 
@@ -71,11 +72,19 @@ function App() {
 
   function handleStartPlay(song: Song) {
     setSelectedSongId(song.id);
+    setPracticeSegment(null);
+    setPage("play");
+  }
+
+  function handleStartPractice(songId: string, startMs: number, endMs: number) {
+    setSelectedSongId(songId);
+    setPracticeSegment({ startMs, endMs });
     setPage("play");
   }
 
   function handleBackToSelect() {
     setPage("select");
+    setPracticeSegment(null);
   }
 
   function handleStartTutorial() {
@@ -171,6 +180,7 @@ function App() {
           onStartTutorial={handleStartTutorial}
           onOpenScorebook={handleOpenScorebook}
           onOpenSettings={handleOpenSettings}
+          onStartPractice={handleStartPractice}
         />
       )}
 
@@ -179,6 +189,7 @@ function App() {
           song={selectedSong}
           onBack={handleBackToSelect}
           onOpenScorebook={handleOpenScorebook}
+          practiceSegment={practiceSegment}
         />
       )}
 
