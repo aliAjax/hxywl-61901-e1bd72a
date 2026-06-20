@@ -117,6 +117,11 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     [keyBindings]
   );
 
+  const spaceIsBound = useMemo(
+    () => trackLabels.some((k) => k.toLowerCase() === "space"),
+    [trackLabels]
+  );
+
   const CHECKPOINT_INTERVAL_PERCENT = 5;
 
   useEffect(() => {
@@ -550,16 +555,6 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
         }
         return;
       }
-      if (key === "space") {
-        if (!started || finished) {
-          e.preventDefault();
-          handleStart();
-        } else if (!finished) {
-          e.preventDefault();
-          handlePauseToggle();
-        }
-        return;
-      }
       if (key === "f12") {
         e.preventDefault();
         setShowSyncDebug((prev) => !prev);
@@ -571,6 +566,17 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
         if (!e.repeat) {
           handleTrackPress(idx);
         }
+        return;
+      }
+      if (key === "space" && !spaceIsBound) {
+        if (!started || finished) {
+          e.preventDefault();
+          handleStart();
+        } else if (!finished) {
+          e.preventDefault();
+          handlePauseToggle();
+        }
+        return;
       }
     };
 
@@ -592,7 +598,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
       window.removeEventListener("keyup", handleKeyUp);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [started, finished, keyBindings]);
+  }, [started, finished, keyBindings, spaceIsBound]);
 
   function handleTrackPointerDown(e: React.PointerEvent, track: number) {
     e.preventDefault();
@@ -773,7 +779,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
             <button
               className={"pause-btn " + (paused ? "paused" : "")}
               onClick={handlePauseToggle}
-              title={paused ? "继续 (Space)" : "暂停 (Esc / Space)"}
+              title={paused ? (spaceIsBound ? "继续 (Esc)" : "继续 (Space)") : (spaceIsBound ? "暂停 (Esc)" : "暂停 (Esc / Space)")}
             >
               {paused ? "▶" : "❚❚"}
             </button>
@@ -1120,7 +1126,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
             <button className="start-btn" onClick={handleStart}>
               ▶ {isPractice ? "开始练习" : "开始演奏"}
             </button>
-            <small className="start-shortcut">按空格键快速开始</small>
+            {!spaceIsBound && <small className="start-shortcut">按空格键快速开始</small>}
           </div>
         </div>
       )}
