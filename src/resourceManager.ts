@@ -22,6 +22,7 @@ const STORAGE_KEYS = {
   PLAY_RECORDS: "rhythm-play-records",
   CALIBRATION: "rhythm-calibration-offset",
   TUTORIAL: "rhythm-tutorial-completed",
+  FAVORITES: "rhythm-favorite-songs",
 } as const;
 
 const TRACK_COUNT = 4;
@@ -442,12 +443,14 @@ class ResourceManager {
     bestScores: Record<string, number>;
     playRecords: PlayRecord[];
     version: ResourceVersion | null;
+    favoriteSongIds: Set<string>;
   } = {
     songs: null,
     charts: {},
     bestScores: {},
     playRecords: [],
     version: null,
+    favoriteSongIds: new Set(),
   };
 
   private initialized = false;
@@ -710,6 +713,7 @@ class ResourceManager {
     localStorage.removeItem(STORAGE_KEYS.VERSION);
     localStorage.removeItem(STORAGE_KEYS.CALIBRATION);
     localStorage.removeItem(STORAGE_KEYS.TUTORIAL);
+    localStorage.removeItem(STORAGE_KEYS.FAVORITES);
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
@@ -724,6 +728,7 @@ class ResourceManager {
       bestScores: {},
       playRecords: [],
       version: null,
+      favoriteSongIds: new Set(),
     };
     this.initialized = false;
   }
@@ -1007,6 +1012,40 @@ class ResourceManager {
 
   resetTutorialStatus(): void {
     localStorage.removeItem(STORAGE_KEYS.TUTORIAL);
+  }
+
+  getFavoriteSongIds(): string[] {
+    this.ensureInitialized();
+    if (this.memoryCache.favoriteSongIds.size === 0) {
+      const raw = localStorage.getItem(STORAGE_KEYS.FAVORITES);
+      const ids = safeParseJSON<string[]>(raw, []);
+      this.memoryCache.favoriteSongIds = new Set(ids);
+    }
+    return [...this.memoryCache.favoriteSongIds];
+  }
+
+  isSongFavorite(songId: string): boolean {
+    return this.getFavoriteSongIds().includes(songId);
+  }
+
+  toggleSongFavorite(songId: string): boolean {
+    this.ensureInitialized();
+    const ids = this.getFavoriteSongIds();
+    const isFav = ids.includes(songId);
+    let newIds: string[];
+    if (isFav) {
+      newIds = ids.filter((id) => id !== songId);
+    } else {
+      newIds = [...ids, songId];
+    }
+    localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(newIds));
+    this.memoryCache.favoriteSongIds = new Set(newIds);
+    return !isFav;
+  }
+
+  resetFavorites(): void {
+    localStorage.removeItem(STORAGE_KEYS.FAVORITES);
+    this.memoryCache.favoriteSongIds = new Set();
   }
 }
 

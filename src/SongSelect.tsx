@@ -6,6 +6,8 @@ import {
   difficultyColors,
   formatDuration,
   getSongBestScore,
+  isSongFavorite,
+  toggleSongFavorite,
 } from "./songs";
 import ChartPreview from "./ChartPreview";
 
@@ -28,10 +30,25 @@ export default function SongSelect({
 }: SongSelectProps) {
   const [previewingSongId, setPreviewingSongId] = useState<string | null>(null);
   const [previewStep, setPreviewStep] = useState(-1);
+  const [favoriteTick, setFavoriteTick] = useState(0);
   const previewTimerRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  const selectedSong = songs.find((s) => s.id === selectedSongId) || songs[0];
+  const sortedSongs = [...songs].sort((a, b) => {
+    const aFav = isSongFavorite(a.id);
+    const bFav = isSongFavorite(b.id);
+    if (aFav && !bFav) return -1;
+    if (!aFav && bFav) return 1;
+    return 0;
+  });
+
+  const selectedSong = sortedSongs.find((s) => s.id === selectedSongId) || sortedSongs[0];
+
+  function handleToggleFavorite(songId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    toggleSongFavorite(songId);
+    setFavoriteTick((t) => t + 1);
+  }
 
   useEffect(() => {
     return () => {
@@ -121,7 +138,7 @@ export default function SongSelect({
         <div className="select-header-row">
           <div>
             <h1 className="select-title">选择歌曲</h1>
-            <p className="select-subtitle">共 {songs.length} 首歌曲可供演奏</p>
+            <p className="select-subtitle">共 {songs.length} 首歌曲，已收藏 {songs.filter((s) => isSongFavorite(s.id)).length} 首</p>
           </div>
           <button
             className="scorebook-entry-btn"
@@ -140,15 +157,16 @@ export default function SongSelect({
 
       <div className="select-layout">
         <div className="song-list">
-          {songs.map((song) => {
+          {sortedSongs.map((song) => {
             const isSelected = selectedSong.id === song.id;
             const isPreviewing = previewingSongId === song.id;
             const best = getSongBestScore(song.id);
+            const isFav = isSongFavorite(song.id);
 
             return (
               <div
                 key={song.id}
-                className={`song-card ${isSelected ? "selected" : ""}`}
+                className={`song-card ${isSelected ? "selected" : ""} ${isFav ? "favorite" : ""}`}
                 onClick={() => onSelectSong(song)}
               >
                 <div
@@ -158,6 +176,7 @@ export default function SongSelect({
                   }}
                 >
                   <span className="song-icon">♪</span>
+                  {isFav && <span className="favorite-indicator">⭐</span>}
                   {isPreviewing && (
                     <div className="preview-wave">
                       {song.previewPattern.map((_, i) => (
@@ -171,7 +190,16 @@ export default function SongSelect({
                 </div>
 
                 <div className="song-info">
-                  <h3 className="song-title">{song.title}</h3>
+                  <div className="song-title-row">
+                    <h3 className="song-title">{song.title}</h3>
+                    <button
+                      className={`favorite-btn ${isFav ? "active" : ""}`}
+                      onClick={(e) => handleToggleFavorite(song.id, e)}
+                      title={isFav ? "取消收藏" : "收藏歌曲"}
+                    >
+                      {isFav ? "★" : "☆"}
+                    </button>
+                  </div>
                   <p className="song-artist">{song.artist}</p>
 
                   <div className="song-meta">
@@ -221,10 +249,20 @@ export default function SongSelect({
             }}
           >
             <span className="detail-icon">♫</span>
+            {isSongFavorite(selectedSong.id) && <span className="detail-favorite-indicator">⭐</span>}
           </div>
 
           <div className="detail-info">
-            <h2 className="detail-title">{selectedSong.title}</h2>
+            <div className="detail-title-row">
+              <h2 className="detail-title">{selectedSong.title}</h2>
+              <button
+                className={`detail-favorite-btn ${isSongFavorite(selectedSong.id) ? "active" : ""}`}
+                onClick={(e) => handleToggleFavorite(selectedSong.id, e)}
+                title={isSongFavorite(selectedSong.id) ? "取消收藏" : "收藏歌曲"}
+              >
+                {isSongFavorite(selectedSong.id) ? "★ 已收藏" : "☆ 收藏"}
+              </button>
+            </div>
             <p className="detail-artist">{selectedSong.artist}</p>
 
             <div className="detail-stats">

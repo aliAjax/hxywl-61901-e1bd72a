@@ -2908,6 +2908,120 @@ button {
   color: #10b981;
 }
 
+.song-card.favorite {
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.song-card.favorite:hover {
+  border-color: rgba(251, 191, 36, 0.55);
+}
+
+.song-card.favorite.selected {
+  border-color: #fbbf24;
+  box-shadow: 0 0 30px rgba(251, 191, 36, 0.2);
+}
+
+.favorite-indicator {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 14px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  animation: favoritePulse 2s ease-in-out infinite;
+}
+
+@keyframes favoritePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+.song-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.favorite-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: #64748b;
+  transition: all 150ms ease;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.favorite-btn:hover {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  transform: scale(1.1);
+}
+
+.favorite-btn.active {
+  color: #fbbf24;
+}
+
+.favorite-btn.active:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.detail-favorite-indicator {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 24px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+  animation: favoritePulse 2s ease-in-out infinite;
+}
+
+.detail-cover {
+  position: relative;
+}
+
+.detail-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.detail-favorite-btn {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  flex-shrink: 0;
+}
+
+.detail-favorite-btn:hover {
+  background: rgba(251, 191, 36, 0.2);
+  border-color: rgba(251, 191, 36, 0.5);
+  color: #fbbf24;
+}
+
+.detail-favorite-btn.active {
+  background: rgba(251, 191, 36, 0.18);
+  border-color: #fbbf24;
+  color: #fbbf24;
+}
+
+.detail-favorite-btn.active:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #f87171;
+}
+
 .sync-debug-hint {
   margin-top: 10px;
   padding-top: 8px;

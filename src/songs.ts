@@ -87,6 +87,22 @@ export function resetTutorialStatus(): void {
   resourceManager.resetTutorialStatus();
 }
 
+export function getFavoriteSongIds(): string[] {
+  return resourceManager.getFavoriteSongIds();
+}
+
+export function isSongFavorite(songId: string): boolean {
+  return resourceManager.isSongFavorite(songId);
+}
+
+export function toggleSongFavorite(songId: string): boolean {
+  return resourceManager.toggleSongFavorite(songId);
+}
+
+export function resetFavorites(): void {
+  resourceManager.resetFavorites();
+}
+
 export const tutorialSteps: TutorialStep[] = [
   {
     id: 1,
