@@ -103,6 +103,79 @@ export function resetFavorites(): void {
   resourceManager.resetFavorites();
 }
 
+export function calcAccuracy(
+  perfectCount: number,
+  goodCount: number,
+  missCount: number
+): number {
+  const total = perfectCount + goodCount + missCount;
+  if (total === 0) return 0;
+  const weighted = perfectCount + goodCount * 0.5;
+  return (weighted / total) * 100;
+}
+
+export type Grade = "SSS" | "SS" | "S" | "A" | "B" | "C" | "D";
+
+export const GRADE_ORDER: Record<Grade, number> = {
+  SSS: 7,
+  SS: 6,
+  S: 5,
+  A: 4,
+  B: 3,
+  C: 2,
+  D: 1,
+};
+
+export const GRADE_COLORS: Record<Grade, string> = {
+  SSS: "#f472b6",
+  SS: "#fb923c",
+  S: "#facc15",
+  A: "#34d399",
+  B: "#60a5fa",
+  C: "#a78bfa",
+  D: "#64748b",
+};
+
+export function calcGrade(
+  perfectCount: number,
+  goodCount: number,
+  missCount: number,
+  totalNotes: number
+): Grade {
+  const total = perfectCount + goodCount + missCount;
+  if (total === 0) return "D";
+  const perfectRate = perfectCount / Math.max(total, totalNotes);
+  const accuracy = calcAccuracy(perfectCount, goodCount, missCount);
+  const noMiss = missCount === 0;
+
+  if (perfectRate >= 0.999 && noMiss) return "SSS";
+  if (accuracy >= 98 && noMiss) return "SS";
+  if (accuracy >= 95) return "S";
+  if (accuracy >= 90) return "A";
+  if (accuracy >= 80) return "B";
+  if (accuracy >= 70) return "C";
+  return "D";
+}
+
+export function calcRecordGrade(record: PlayRecord): Grade {
+  const total =
+    record.perfectCount + record.goodCount + record.missCount;
+  return calcGrade(
+    record.perfectCount,
+    record.goodCount,
+    record.missCount,
+    total
+  );
+}
+
+export function calcRecordAccuracy(record: PlayRecord): number {
+  return calcAccuracy(
+    record.perfectCount,
+    record.goodCount,
+    record.missCount
+  );
+}
+
 export const tutorialSteps: TutorialStep[] = [
   {
     id: 1,

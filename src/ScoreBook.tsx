@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { PlayRecord } from "./types";
 import {
   songs,
@@ -6,6 +6,13 @@ import {
   difficultyColors,
   getPlayRecords,
   getSongBestScore,
+  calcRecordAccuracy,
+  calcRecordGrade,
+  calcAccuracy,
+  calcGrade,
+  GRADE_COLORS,
+  GRADE_ORDER,
+  type Grade,
 } from "./songs";
 
 interface ScoreBookProps {
@@ -28,6 +35,40 @@ export default function ScoreBook({ initialSongId, onBack }: ScoreBookProps) {
   const records: PlayRecord[] = getPlayRecords(activeSongId)
     .sort((a, b) => b.completedAt - a.completedAt);
   const best = getSongBestScore(activeSongId);
+
+  const recentStats = useMemo(() => {
+    if (records.length === 0) return null;
+    const recent = records.slice(0, 10);
+    const count = recent.length;
+
+    let totalPerfect = 0;
+    let totalGood = 0;
+    let totalMiss = 0;
+    let totalNotes = 0;
+    let maxCombo = 0;
+    let bestGrade: Grade = "D";
+
+    for (const rec of recent) {
+      totalPerfect += rec.perfectCount;
+      totalGood += rec.goodCount;
+      totalMiss += rec.missCount;
+      totalNotes += rec.perfectCount + rec.goodCount + rec.missCount;
+      if (rec.maxCombo > maxCombo) maxCombo = rec.maxCombo;
+      const g = calcRecordGrade(rec);
+      if (GRADE_ORDER[g] > GRADE_ORDER[bestGrade]) bestGrade = g;
+    }
+
+    const avgAccuracy = calcAccuracy(totalPerfect, totalGood, totalMiss);
+    const overallGrade = calcGrade(totalPerfect, totalGood, totalMiss, totalNotes);
+
+    return {
+      count,
+      avgAccuracy,
+      maxCombo,
+      bestGrade,
+      overallGrade,
+    };
+  }, [records]);
 
   return (
     <div className="scorebook">
@@ -121,11 +162,63 @@ export default function ScoreBook({ initialSongId, onBack }: ScoreBookProps) {
             </div>
           ) : (
             <div className="scorebook-records">
+              {recentStats && (
+                <div className="scorebook-summary">
+                  <div className="summary-header">
+                    <span className="summary-title">
+                      最近 {recentStats.count} 次统计
+                    </span>
+                  </div>
+                  <div className="summary-cards">
+                    <div className="summary-card summary-card-grade">
+                      <div className="summary-card-label">综合评级</div>
+                      <div
+                        className="summary-card-grade-big"
+                        style={{ color: GRADE_COLORS[recentStats.overallGrade] }}
+                      >
+                        {recentStats.overallGrade}
+                      </div>
+                    </div>
+                    <div className="summary-card">
+                      <div className="summary-card-label">平均命中率</div>
+                      <div className="summary-card-value accuracy-value">
+                        {recentStats.avgAccuracy.toFixed(2)}%
+                      </div>
+                      <div className="summary-bar">
+                        <div
+                          className="summary-bar-fill"
+                          style={{
+                            width: Math.min(100, recentStats.avgAccuracy) + "%",
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="summary-card">
+                      <div className="summary-card-label">最高连击</div>
+                      <div className="summary-card-value combo-value">
+                        {recentStats.maxCombo}
+                      </div>
+                    </div>
+                    <div className="summary-card">
+                      <div className="summary-card-label">最高评级</div>
+                      <div
+                        className="summary-card-value grade-value"
+                        style={{ color: GRADE_COLORS[recentStats.bestGrade] }}
+                      >
+                        {recentStats.bestGrade}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="scorebook-records-header">
                 <span>最近 {records.length} 次游玩</span>
               </div>
               {records.map((record, idx) => {
                 const isBest = record.score >= best && best > 0;
+                const accuracy = calcRecordAccuracy(record);
+                const grade = calcRecordGrade(record);
                 return (
                   <div
                     key={record.completedAt}
@@ -136,6 +229,19 @@ export default function ScoreBook({ initialSongId, onBack }: ScoreBookProps) {
                       <div className="record-top-row">
                         <span className="record-score">
                           {Math.floor(record.score).toLocaleString()}
+                        </span>
+                        <span
+                          className="record-grade-tag"
+                          style={{
+                            color: GRADE_COLORS[grade],
+                            borderColor: GRADE_COLORS[grade] + "66",
+                            backgroundColor: GRADE_COLORS[grade] + "12",
+                          }}
+                        >
+                          {grade}
+                        </span>
+                        <span className="record-accuracy">
+                          命中率 {accuracy.toFixed(2)}%
                         </span>
                         {isBest && (
                           <span className="record-best-tag">最高分</span>
@@ -166,6 +272,12 @@ export default function ScoreBook({ initialSongId, onBack }: ScoreBookProps) {
                         <div className="record-stat">
                           <small>最大连击</small>
                           <strong>{record.maxCombo}</strong>
+                        </div>
+                        <div className="record-stat">
+                          <small>命中率</small>
+                          <strong className="accuracy-text">
+                            {accuracy.toFixed(1)}%
+                          </strong>
                         </div>
                       </div>
                       <div className="record-note-breakdown">
