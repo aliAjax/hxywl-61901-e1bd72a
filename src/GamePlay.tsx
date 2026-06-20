@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Song, PracticeSegment, EffectiveCalibration, ChartDifficulty } from "./types";
-import type { ActiveNote, GameStats, JudgeType, NoteType } from "./types";
+import type { ActiveNote, GameStats, JudgeType, NoteType, BestPlaySummary, ScoreCheckpoint, LiveComparisonState } from "./types";
 import {
   difficultyLabels,
   difficultyColors,
@@ -14,6 +14,9 @@ import {
   resetSongCalibrationOffset,
   getSongCalibrationOffset,
   CHART_DIFFICULTY_INFO,
+  getBestPlaySummary,
+  saveBestPlaySummary,
+  computeLiveComparison,
 } from "./songs";
 import {
   ChartPlayer, type SpawnedNote, HIT_ZONE_RELATIVE, type NoteVisualUpdate
@@ -85,10 +88,29 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
   const [showSongCalibration, setShowSongCalibration] = useState(false);
   const [tempSongOffset, setTempSongOffset] = useState(0);
 
+  const [showBestComparison, setShowBestComparison] = useState(true);
+  const [bestPlaySummary, setBestPlaySummary] = useState<BestPlaySummary | null>(null);
+  const [checkpoints, setCheckpoints] = useState<ScoreCheckpoint[]>([]);
+  const [liveComparison, setLiveComparison] = useState<LiveComparisonState | null>(null);
+  const lastCheckpointPercentRef = useRef<number>(-1);
+  const currentStatsRef = useRef<GameStats>({
+    score: 0, combo: 0, maxCombo: 0,
+    perfectCount: 0, goodCount: 0, missCount: 0,
+    tapPerfectCount: 0, tapGoodCount: 0, tapMissCount: 0,
+    longPerfectCount: 0, longGoodCount: 0, longMissCount: 0,
+  });
+
   const isPractice = !!practiceSegment;
   const bestScore = useMemo(() => getSongBestScore(song.id, difficulty), [song.id, difficulty]);
   const finalStatsRef = useRef<GameStats | null>(null);
   const activePointersRef = useRef<Map<number, number>>(new Map());
+
+  const CHECKPOINT_INTERVAL_PERCENT = 5;
+
+  useEffect(() => {
+    const summary = getBestPlaySummary(song.id, difficulty);
+    setBestPlaySummary(summary);
+  }, [song.id, difficulty]);
 
   useEffect(() => {
     const measure = () => {
@@ -204,6 +226,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
         }, 320);
       },
       onStatsChange: (stats: GameStats) => {
+        currentStatsRef.current = { ...stats };
         setScore(Math.floor(stats.score));
         setCombo(stats.combo);
         setMaxCombo(stats.maxCombo);
@@ -219,6 +242,35 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
       },
       onTimeUpdate: (elapsedMs: number) => {
         setElapsed(elapsedMs);
+        if (isPractice) return;
+        const effectiveStartMs = practiceSegment ? practiceSegment.startMs : 0;
+        const effectiveDurationMs = practiceSegment
+          ? practiceSegment.endMs - effectiveStartMs
+          : song.duration * 1000;
+        const progress = Math.max(0, Math.min(100, ((elapsedMs - effectiveStartMs) / effectiveDurationMs) * 100));
+        const bucketedProgress = Math.floor(progress / CHECKPOINT_INTERVAL_PERCENT) * CHECKPOINT_INTERVAL_PERCENT;
+        if (bucketedProgress > 0 && bucketedProgress > lastCheckpointPercentRef.current && bucketedProgress <= 100) {
+          lastCheckpointPercentRef.current = bucketedProgress;
+          const stats = currentStatsRef.current;
+          const checkpoint: ScoreCheckpoint = {
+            progressPercent: bucketedProgress,
+            elapsedMs,
+            score: Math.floor(stats.score),
+            combo: stats.combo,
+            perfectCount: stats.perfectCount,
+            goodCount: stats.goodCount,
+            missCount: stats.missCount,
+          };
+          setCheckpoints((prev) => [...prev, checkpoint]);
+        }
+        if (showBestComparison && bestPlaySummary && bestPlaySummary.checkpoints.length > 0) {
+          const comparison = computeLiveComparison(
+            bestPlaySummary,
+            currentStatsRef.current,
+            progress
+          );
+          setLiveComparison(comparison);
+        }
       },
       onFinish: (finalStats: GameStats) => {
         finalStatsRef.current = finalStats;
@@ -283,7 +335,8 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
   useEffect(() => {
     if (finished && !savedRecord && finalStatsRef.current) {
       if (!isPractice) {
-        const finalScore = finalStatsRef.current.score;
+        const finalStats = finalStatsRef.current;
+        const finalScore = finalStats.score;
         if (finalScore > 0) {
           saveSongBestScore(song.id, difficulty, finalScore);
         }
@@ -291,22 +344,45 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
           songId: song.id,
           difficulty,
           score: finalScore,
-          maxCombo: finalStatsRef.current.maxCombo,
-          perfectCount: finalStatsRef.current.perfectCount,
-          goodCount: finalStatsRef.current.goodCount,
-          missCount: finalStatsRef.current.missCount,
-          tapPerfectCount: finalStatsRef.current.tapPerfectCount,
-          tapGoodCount: finalStatsRef.current.tapGoodCount,
-          tapMissCount: finalStatsRef.current.tapMissCount,
-          longPerfectCount: finalStatsRef.current.longPerfectCount,
-          longGoodCount: finalStatsRef.current.longGoodCount,
-          longMissCount: finalStatsRef.current.longMissCount,
+          maxCombo: finalStats.maxCombo,
+          perfectCount: finalStats.perfectCount,
+          goodCount: finalStats.goodCount,
+          missCount: finalStats.missCount,
+          tapPerfectCount: finalStats.tapPerfectCount,
+          tapGoodCount: finalStats.tapGoodCount,
+          tapMissCount: finalStats.tapMissCount,
+          longPerfectCount: finalStats.longPerfectCount,
+          longGoodCount: finalStats.longGoodCount,
+          longMissCount: finalStats.longMissCount,
           completedAt: Date.now(),
         });
+        const now = Date.now();
+        if (checkpoints.length > 0 || finalScore > 0) {
+          const saved = saveBestPlaySummary({
+            songId: song.id,
+            difficulty,
+            score: Math.floor(finalScore),
+            maxCombo: finalStats.maxCombo,
+            perfectCount: finalStats.perfectCount,
+            goodCount: finalStats.goodCount,
+            missCount: finalStats.missCount,
+            tapPerfectCount: finalStats.tapPerfectCount,
+            tapGoodCount: finalStats.tapGoodCount,
+            tapMissCount: finalStats.tapMissCount,
+            longPerfectCount: finalStats.longPerfectCount,
+            longGoodCount: finalStats.longGoodCount,
+            longMissCount: finalStats.longMissCount,
+            checkpoints,
+            completedAt: now,
+          });
+          if (saved) {
+            setBestPlaySummary(getBestPlaySummary(song.id, difficulty));
+          }
+        }
       }
       setSavedRecord(true);
     }
-  }, [finished, savedRecord, song.id, difficulty, isPractice]);
+  }, [finished, savedRecord, song.id, difficulty, isPractice, checkpoints]);
 
   function handleStart() {
     setStarted(true);
@@ -332,6 +408,15 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     setLastJudge(null);
     setJudgeKey(0);
     setPressedTracks(new Array(TRACK_COUNT).fill(false));
+    setCheckpoints([]);
+    setLiveComparison(null);
+    lastCheckpointPercentRef.current = -1;
+    currentStatsRef.current = {
+      score: 0, combo: 0, maxCombo: 0,
+      perfectCount: 0, goodCount: 0, missCount: 0,
+      tapPerfectCount: 0, tapGoodCount: 0, tapMissCount: 0,
+      longPerfectCount: 0, longGoodCount: 0, longMissCount: 0,
+    };
     finalStatsRef.current = null;
     activePointersRef.current.clear();
     playerRef.current?.start();
@@ -371,6 +456,15 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     setLastJudge(null);
     setJudgeKey(0);
     setPressedTracks(new Array(TRACK_COUNT).fill(false));
+    setCheckpoints([]);
+    setLiveComparison(null);
+    lastCheckpointPercentRef.current = -1;
+    currentStatsRef.current = {
+      score: 0, combo: 0, maxCombo: 0,
+      perfectCount: 0, goodCount: 0, missCount: 0,
+      tapPerfectCount: 0, tapGoodCount: 0, tapMissCount: 0,
+      longPerfectCount: 0, longGoodCount: 0, longMissCount: 0,
+    };
     finalStatsRef.current = null;
     activePointersRef.current.clear();
     playerRef.current?.restart();
@@ -516,6 +610,66 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     ? Math.round((practiceSegment.endMs - practiceSegment.startMs) / 1000)
     : 0;
 
+  const comparisonAnalysis = useMemo(() => {
+    if (!bestPlaySummary || isPractice) return null;
+    const calcAcc = (p: number, g: number, m: number) => {
+      const total = p + g + m;
+      if (total === 0) return 0;
+      return ((p + g * 0.5) / total) * 100;
+    };
+    const tapAccCur = calcAcc(tapPerfectCount, tapGoodCount, tapMissCount);
+    const tapAccBest = calcAcc(
+      bestPlaySummary.tapPerfectCount,
+      bestPlaySummary.tapGoodCount,
+      bestPlaySummary.tapMissCount
+    );
+    const longAccCur = calcAcc(longPerfectCount, longGoodCount, longMissCount);
+    const longAccBest = calcAcc(
+      bestPlaySummary.longPerfectCount,
+      bestPlaySummary.longGoodCount,
+      bestPlaySummary.longMissCount
+    );
+    const overallAccCur = calcAcc(perfectCount, goodCount, missCount);
+    const overallAccBest = calcAcc(
+      bestPlaySummary.perfectCount,
+      bestPlaySummary.goodCount,
+      bestPlaySummary.missCount
+    );
+    const scoreDiff = score - bestPlaySummary.score;
+    const comboDiff = maxCombo - bestPlaySummary.maxCombo;
+    return {
+      tap: {
+        current: tapAccCur,
+        best: tapAccBest,
+        diff: tapAccCur - tapAccBest,
+        perfectDiff: tapPerfectCount - bestPlaySummary.tapPerfectCount,
+        goodDiff: tapGoodCount - bestPlaySummary.tapGoodCount,
+        missDiff: tapMissCount - bestPlaySummary.tapMissCount,
+      },
+      long: {
+        current: longAccCur,
+        best: longAccBest,
+        diff: longAccCur - longAccBest,
+        perfectDiff: longPerfectCount - bestPlaySummary.longPerfectCount,
+        goodDiff: longGoodCount - bestPlaySummary.longGoodCount,
+        missDiff: longMissCount - bestPlaySummary.longMissCount,
+      },
+      overall: {
+        current: overallAccCur,
+        best: overallAccBest,
+        diff: overallAccCur - overallAccBest,
+      },
+      scoreDiff,
+      comboDiff,
+    };
+  }, [
+    bestPlaySummary, isPractice,
+    tapPerfectCount, tapGoodCount, tapMissCount,
+    longPerfectCount, longGoodCount, longMissCount,
+    perfectCount, goodCount, missCount,
+    score, maxCombo,
+  ]);
+
   return (
     <div className={`game-play ${isPortrait ? "mobile-portrait" : "mobile-landscape"}`}>
       <div className="play-header">
@@ -549,6 +703,24 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
             <small>连击</small>
             <strong className="combo-num">{combo}</strong>
           </div>
+          {showBestComparison && liveComparison && started && !finished && (
+            <div className="comparison-stats">
+              <div className={"comparison-item " + (liveComparison.isScoreBehind ? "behind" : "ahead")}>
+                <small>分数差</small>
+                <strong>
+                  {liveComparison.scoreDiff >= 0 ? "+" : ""}
+                  {liveComparison.scoreDiff.toLocaleString()}
+                </strong>
+              </div>
+              <div className={"comparison-item " + (liveComparison.isComboBehind ? "behind" : "ahead")}>
+                <small>连击差</small>
+                <strong>
+                  {liveComparison.comboDiff >= 0 ? "+" : ""}
+                  {liveComparison.comboDiff}
+                </strong>
+              </div>
+            </div>
+          )}
           {started && !finished && (
             <button
               className={"pause-btn " + (paused ? "paused" : "")}
@@ -884,6 +1056,16 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
                 {chartDiffInfo.label}最高分：<strong>{bestScore.toLocaleString()}</strong>
               </p>
             )}
+            {!isPractice && bestPlaySummary && bestPlaySummary.checkpoints.length > 0 && (
+              <label className="comparison-toggle">
+                <input
+                  type="checkbox"
+                  checked={showBestComparison}
+                  onChange={(e) => setShowBestComparison(e.target.checked)}
+                />
+                <span>显示最佳记录进度对照</span>
+              </label>
+            )}
             <p className="start-keys">
               <strong>触屏</strong>：按下方彩色按钮　|　<strong>键盘</strong>：D / F / J / K
             </p>
@@ -1120,6 +1302,104 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
                 </div>
               )}
             </div>
+
+            {comparisonAnalysis && !isPractice && (
+              <div className="result-comparison-section">
+                <div className="result-section-title">与最佳记录对比</div>
+                <div className="comparison-overview">
+                  <div className={"comparison-overview-item " + (comparisonAnalysis.scoreDiff >= 0 ? "positive" : "negative")}>
+                    <small>总分差距</small>
+                    <strong>
+                      {comparisonAnalysis.scoreDiff >= 0 ? "+" : ""}
+                      {comparisonAnalysis.scoreDiff.toLocaleString()}
+                    </strong>
+                  </div>
+                  <div className={"comparison-overview-item " + (comparisonAnalysis.comboDiff >= 0 ? "positive" : "negative")}>
+                    <small>最大连击差距</small>
+                    <strong>
+                      {comparisonAnalysis.comboDiff >= 0 ? "+" : ""}
+                      {comparisonAnalysis.comboDiff}
+                    </strong>
+                  </div>
+                  <div className={"comparison-overview-item " + (comparisonAnalysis.overall.diff >= 0 ? "positive" : "negative")}>
+                    <small>命中率差距</small>
+                    <strong>
+                      {comparisonAnalysis.overall.diff >= 0 ? "+" : ""}
+                      {comparisonAnalysis.overall.diff.toFixed(2)}%
+                    </strong>
+                  </div>
+                </div>
+                {totalTapNotes > 0 && (
+                  <div className="comparison-note-type">
+                    <div className="comparison-note-header">
+                      <span className="note-type-label">👆 点击音符</span>
+                      <span className={"note-type-trend " + (comparisonAnalysis.tap.diff >= 0 ? "positive" : "negative")}>
+                        {comparisonAnalysis.tap.diff > 0.1
+                          ? "📈 进步 +" + comparisonAnalysis.tap.diff.toFixed(2) + "%"
+                          : comparisonAnalysis.tap.diff < -0.1
+                          ? "📉 退步 " + comparisonAnalysis.tap.diff.toFixed(2) + "%"
+                          : "➡️ 持平"}
+                      </span>
+                    </div>
+                    <div className="comparison-note-details">
+                      <div className="comparison-detail">
+                        <span className="perfect">Perfect</span>
+                        <span className={comparisonAnalysis.tap.perfectDiff >= 0 ? "positive" : "negative"}>
+                          {comparisonAnalysis.tap.perfectDiff >= 0 ? "+" : ""}{comparisonAnalysis.tap.perfectDiff}
+                        </span>
+                      </div>
+                      <div className="comparison-detail">
+                        <span className="good">Good</span>
+                        <span className={comparisonAnalysis.tap.goodDiff >= 0 ? "positive" : "negative"}>
+                          {comparisonAnalysis.tap.goodDiff >= 0 ? "+" : ""}{comparisonAnalysis.tap.goodDiff}
+                        </span>
+                      </div>
+                      <div className="comparison-detail">
+                        <span className="miss">Miss</span>
+                        <span className={comparisonAnalysis.tap.missDiff <= 0 ? "positive" : "negative"}>
+                          {comparisonAnalysis.tap.missDiff >= 0 ? "+" : ""}{comparisonAnalysis.tap.missDiff}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {totalLongNotes > 0 && (
+                  <div className="comparison-note-type">
+                    <div className="comparison-note-header">
+                      <span className="note-type-label">🖱 长按音符</span>
+                      <span className={"note-type-trend " + (comparisonAnalysis.long.diff >= 0 ? "positive" : "negative")}>
+                        {comparisonAnalysis.long.diff > 0.1
+                          ? "📈 进步 +" + comparisonAnalysis.long.diff.toFixed(2) + "%"
+                          : comparisonAnalysis.long.diff < -0.1
+                          ? "📉 退步 " + comparisonAnalysis.long.diff.toFixed(2) + "%"
+                          : "➡️ 持平"}
+                      </span>
+                    </div>
+                    <div className="comparison-note-details">
+                      <div className="comparison-detail">
+                        <span className="perfect">Perfect</span>
+                        <span className={comparisonAnalysis.long.perfectDiff >= 0 ? "positive" : "negative"}>
+                          {comparisonAnalysis.long.perfectDiff >= 0 ? "+" : ""}{comparisonAnalysis.long.perfectDiff}
+                        </span>
+                      </div>
+                      <div className="comparison-detail">
+                        <span className="good">Good</span>
+                        <span className={comparisonAnalysis.long.goodDiff >= 0 ? "positive" : "negative"}>
+                          {comparisonAnalysis.long.goodDiff >= 0 ? "+" : ""}{comparisonAnalysis.long.goodDiff}
+                        </span>
+                      </div>
+                      <div className="comparison-detail">
+                        <span className="miss">Miss</span>
+                        <span className={comparisonAnalysis.long.missDiff <= 0 ? "positive" : "negative"}>
+                          {comparisonAnalysis.long.missDiff >= 0 ? "+" : ""}{comparisonAnalysis.long.missDiff}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="result-actions">
               <button className="ghost-btn" onClick={onBack}>
                 ← 返回选曲

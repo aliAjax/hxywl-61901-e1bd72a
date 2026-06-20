@@ -1,4 +1,4 @@
-import type { Song, PlayRecord, ChartDifficulty } from "./types";
+import type { Song, PlayRecord, ChartDifficulty, BestPlaySummary, ScoreCheckpoint, LiveComparisonState, GameStats } from "./types";
 import {
   resourceManager,
   defaultSongs,
@@ -61,6 +61,61 @@ export function getPlayRecords(songId?: string, difficulty?: ChartDifficulty): P
 
 export function savePlayRecord(record: PlayRecord): void {
   resourceManager.savePlayRecord(record);
+}
+
+export function getBestPlaySummary(songId: string, difficulty: ChartDifficulty = "standard"): BestPlaySummary | null {
+  return resourceManager.getBestPlaySummary(songId, difficulty);
+}
+
+export function saveBestPlaySummary(summary: BestPlaySummary): boolean {
+  return resourceManager.saveBestPlaySummary(summary);
+}
+
+function interpolateCheckpoint(checkpoints: ScoreCheckpoint[], progressPercent: number): ScoreCheckpoint | null {
+  if (checkpoints.length === 0) return null;
+  if (progressPercent <= checkpoints[0].progressPercent) return checkpoints[0];
+  if (progressPercent >= checkpoints[checkpoints.length - 1].progressPercent) return checkpoints[checkpoints.length - 1];
+
+  for (let i = 0; i < checkpoints.length - 1; i++) {
+    const curr = checkpoints[i];
+    const next = checkpoints[i + 1];
+    if (progressPercent >= curr.progressPercent && progressPercent <= next.progressPercent) {
+      const range = next.progressPercent - curr.progressPercent;
+      const t = range === 0 ? 0 : (progressPercent - curr.progressPercent) / range;
+      return {
+        progressPercent,
+        elapsedMs: Math.round(curr.elapsedMs + (next.elapsedMs - curr.elapsedMs) * t),
+        score: Math.round(curr.score + (next.score - curr.score) * t),
+        combo: Math.round(curr.combo + (next.combo - curr.combo) * t),
+        perfectCount: Math.round(curr.perfectCount + (next.perfectCount - curr.perfectCount) * t),
+        goodCount: Math.round(curr.goodCount + (next.goodCount - curr.goodCount) * t),
+        missCount: Math.round(curr.missCount + (next.missCount - curr.missCount) * t),
+      };
+    }
+  }
+  return checkpoints[checkpoints.length - 1];
+}
+
+export function computeLiveComparison(
+  bestSummary: BestPlaySummary | null,
+  currentStats: GameStats,
+  progressPercent: number
+): LiveComparisonState | null {
+  if (!bestSummary || bestSummary.checkpoints.length === 0) return null;
+  const bestAt = interpolateCheckpoint(bestSummary.checkpoints, progressPercent);
+  if (!bestAt) return null;
+
+  const scoreDiff = Math.floor(currentStats.score) - bestAt.score;
+  const comboDiff = currentStats.combo - bestAt.combo;
+
+  return {
+    scoreDiff,
+    comboDiff,
+    bestScoreAtProgress: bestAt.score,
+    bestComboAtProgress: bestAt.combo,
+    isScoreBehind: scoreDiff < 0,
+    isComboBehind: comboDiff < 0,
+  };
 }
 
 export function getCalibrationOffset(): number {

@@ -11,6 +11,8 @@ import type {
   EffectiveCalibration,
   ChartDifficulty,
   ChartDifficultyInfo,
+  BestPlaySummary,
+  ScoreCheckpoint,
 } from "./types";
 
 const CURRENT_SCHEMA_VERSION = 2;
@@ -48,6 +50,7 @@ const STORAGE_KEYS = {
   CHARTS: "rhythm-charts",
   BEST_SCORES: "rhythm-best-scores",
   PLAY_RECORDS: "rhythm-play-records",
+  BEST_SUMMARIES: "rhythm-best-summaries",
   CALIBRATION: "rhythm-calibration-offset",
   CALIBRATION_V2: "rhythm-calibration-data",
   TUTORIAL: "rhythm-tutorial-completed",
@@ -539,11 +542,34 @@ function isValidPlayRecord(record: unknown): record is PlayRecord {
   );
 }
 
+function isValidBestPlaySummary(summary: unknown): summary is BestPlaySummary {
+  if (!summary || typeof summary !== "object") return false;
+  const s = summary as Record<string, unknown>;
+  return (
+    typeof s.songId === "string" &&
+    (typeof s.difficulty === "string" || s.difficulty === undefined) &&
+    typeof s.score === "number" &&
+    typeof s.maxCombo === "number" &&
+    typeof s.perfectCount === "number" &&
+    typeof s.goodCount === "number" &&
+    typeof s.missCount === "number" &&
+    typeof s.tapPerfectCount === "number" &&
+    typeof s.tapGoodCount === "number" &&
+    typeof s.tapMissCount === "number" &&
+    typeof s.longPerfectCount === "number" &&
+    typeof s.longGoodCount === "number" &&
+    typeof s.longMissCount === "number" &&
+    Array.isArray(s.checkpoints) &&
+    typeof s.completedAt === "number"
+  );
+}
+
 class ResourceManager {
   private memoryCache: {
     songs: Song[] | null;
     charts: Record<string, Chart>;
     bestScores: Record<string, number>;
+    bestSummaries: Record<string, BestPlaySummary>;
     playRecords: PlayRecord[];
     version: ResourceVersion | null;
     favoriteSongIds: Set<string>;
@@ -551,6 +577,7 @@ class ResourceManager {
     songs: null,
     charts: {},
     bestScores: {},
+    bestSummaries: {},
     playRecords: [],
     version: null,
     favoriteSongIds: new Set(),
@@ -893,6 +920,7 @@ class ResourceManager {
     localStorage.removeItem(STORAGE_KEYS.SONGS);
     localStorage.removeItem(STORAGE_KEYS.CHARTS);
     localStorage.removeItem(STORAGE_KEYS.BEST_SCORES);
+    localStorage.removeItem(STORAGE_KEYS.BEST_SUMMARIES);
     localStorage.removeItem(STORAGE_KEYS.PLAY_RECORDS);
     localStorage.removeItem(STORAGE_KEYS.VERSION);
     localStorage.removeItem(STORAGE_KEYS.CALIBRATION);
@@ -911,6 +939,7 @@ class ResourceManager {
       songs: null,
       charts: {},
       bestScores: {},
+      bestSummaries: {},
       playRecords: [],
       version: null,
       favoriteSongIds: new Set(),
@@ -921,7 +950,9 @@ class ResourceManager {
   resetScores(): void {
     this.writeDefaultBestScores();
     localStorage.removeItem(STORAGE_KEYS.PLAY_RECORDS);
+    localStorage.removeItem(STORAGE_KEYS.BEST_SUMMARIES);
     this.memoryCache.playRecords = [];
+    this.memoryCache.bestSummaries = {};
   }
 
   resetSettings(): void {
@@ -1217,6 +1248,41 @@ class ResourceManager {
     }
     localStorage.setItem(STORAGE_KEYS.PLAY_RECORDS, JSON.stringify(trimmed));
     this.memoryCache.playRecords = trimmed;
+  }
+
+  getBestPlaySummary(songId: string, difficulty: ChartDifficulty = "standard"): BestPlaySummary | null {
+    this.ensureInitialized();
+    const key = makeScoreKey(songId, difficulty);
+    if (this.memoryCache.bestSummaries[key]) {
+      return this.memoryCache.bestSummaries[key];
+    }
+    const all = safeParseJSON<Record<string, BestPlaySummary>>(
+      localStorage.getItem(STORAGE_KEYS.BEST_SUMMARIES),
+      {}
+    );
+    this.memoryCache.bestSummaries = all;
+    const found = all[key];
+    return found && isValidBestPlaySummary(found) ? found : null;
+  }
+
+  saveBestPlaySummary(summary: BestPlaySummary): boolean {
+    this.ensureInitialized();
+    const key = makeScoreKey(summary.songId, summary.difficulty ?? "standard");
+    const current = this.getBestPlaySummary(summary.songId, summary.difficulty ?? "standard");
+    if (current && summary.score <= current.score) return false;
+    const all = safeParseJSON<Record<string, BestPlaySummary>>(
+      localStorage.getItem(STORAGE_KEYS.BEST_SUMMARIES),
+      {}
+    );
+    const normalized: BestPlaySummary = {
+      ...summary,
+      difficulty: summary.difficulty ?? "standard",
+      checkpoints: summary.checkpoints ?? [],
+    };
+    all[key] = normalized;
+    localStorage.setItem(STORAGE_KEYS.BEST_SUMMARIES, JSON.stringify(all));
+    this.memoryCache.bestSummaries = all;
+    return true;
   }
 
   getCalibrationOffset(): number {

@@ -138,3 +138,40 @@ export interface EffectiveCalibration {
   value: number;
   source: CalibrationSource;
 }
+
+export interface ScoreCheckpoint {
+  progressPercent: number;
+  elapsedMs: number;
+  score: number;
+  combo: number;
+  perfectCount: number;
+  goodCount: number;
+  missCount: number;
+}
+
+export interface BestPlaySummary {
+  songId: string;
+  difficulty: ChartDifficulty;
+  score: number;
+  maxCombo: number;
+  perfectCount: number;
+  goodCount: number;
+  missCount: number;
+  tapPerfectCount: number;
+  tapGoodCount: number;
+  tapMissCount: number;
+  longPerfectCount: number;
+  longGoodCount: number;
+  longMissCount: number;
+  checkpoints: ScoreCheckpoint[];
+  completedAt: number;
+}
+
+export interface LiveComparisonState {
+  scoreDiff: number;
+  comboDiff: number;
+  bestScoreAtProgress: number;
+  bestComboAtProgress: number;
+  isScoreBehind: boolean;
+  isComboBehind: boolean;
+}
