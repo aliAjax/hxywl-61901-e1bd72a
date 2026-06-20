@@ -1,4 +1,4 @@
-import type { Chart, ChartNote, GameStats, JudgeType, NoteType, Song, EffectiveCalibration } from "./types";
+import type { Chart, ChartNote, GameStats, JudgeType, NoteType, Song, EffectiveCalibration, ChartDifficulty } from "./types";
 import { getChartForSong } from "./charts";
 import { getEffectiveCalibration } from "./songs";
 import { AudioSyncEngine, type SyncDiagnostics } from "./audioSyncEngine";
@@ -69,12 +69,14 @@ interface InternalActiveNote {
 export interface ChartPlayerOptions {
   practiceStartMs?: number;
   practiceEndMs?: number;
+  difficulty?: ChartDifficulty;
 }
 
 export class ChartPlayer {
   private song: Song;
   private chart: Chart;
   private cb: ChartPlayerCallbacks;
+  private difficulty: ChartDifficulty;
 
   private syncEngine: AudioSyncEngine;
 
@@ -116,7 +118,8 @@ export class ChartPlayer {
 
   constructor(song: Song, callbacks: ChartPlayerCallbacks, options?: ChartPlayerOptions) {
     this.song = song;
-    this.chart = getChartForSong(song.id);
+    this.difficulty = options?.difficulty ?? "standard";
+    this.chart = getChartForSong(song.id, this.difficulty);
     this.cb = callbacks;
     this.practiceStartMs = options?.practiceStartMs ?? 0;
     this.practiceEndMs = options?.practiceEndMs ?? song.duration * 1000;
@@ -176,6 +179,10 @@ export class ChartPlayer {
 
   getChart(): Chart {
     return this.chart;
+  }
+
+  getDifficulty(): ChartDifficulty {
+    return this.difficulty;
   }
 
   getElapsedMs(): number {

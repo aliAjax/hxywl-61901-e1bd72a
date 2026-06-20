@@ -1,10 +1,16 @@
-import type { Chart } from "./types";
-import { resourceManager } from "./resourceManager";
+import type { Chart, ChartDifficulty } from "./types";
+import { resourceManager, CHART_DIFFICULTIES, CHART_DIFFICULTY_INFO } from "./resourceManager";
 
-export function getChartForSong(songId: string): Chart {
-  return resourceManager.getChart(songId);
+export { CHART_DIFFICULTIES, CHART_DIFFICULTY_INFO };
+
+export function getChartForSong(songId: string, difficulty: ChartDifficulty = "standard"): Chart {
+  return resourceManager.getChart(songId, difficulty);
 }
 
-export function rebuildChartForSong(songId: string): Chart {
-  return resourceManager.rebuildChart(songId);
+export function rebuildChartForSong(songId: string, difficulty: ChartDifficulty = "standard"): Chart {
+  return resourceManager.rebuildChart(songId, difficulty);
+}
+
+export function rebuildAllChartsForSong(songId: string): void {
+  resourceManager.rebuildAllChartsForSong(songId);
 }

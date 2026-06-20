@@ -1,5 +1,7 @@
 export type Difficulty = "easy" | "normal" | "hard" | "expert";
 
+export type ChartDifficulty = "casual" | "standard" | "challenge";
+
 export type NoteType = "tap" | "long";
 
 export interface Song {
@@ -15,8 +17,15 @@ export interface Song {
   previewPattern: number[];
 }
 
+export interface ChartDifficultyInfo {
+  level: number;
+  label: string;
+  color: string;
+}
+
 export interface PlayRecord {
   songId: string;
+  difficulty: ChartDifficulty;
   score: number;
   maxCombo: number;
   perfectCount: number;
@@ -48,9 +57,11 @@ export interface ChartNote {
 
 export interface Chart {
   songId: string;
+  difficulty: ChartDifficulty;
   totalNotes: number;
   totalTapNotes: number;
   totalLongNotes: number;
+  chorusCount: number;
   notes: ChartNote[];
   audioBeats: { time: number; freq: number; type: "kick" | "snare" | "hihat" | "melody" }[];
 }

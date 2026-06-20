@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import type { PlayRecord } from "./types";
+import type { PlayRecord, ChartDifficulty } from "./types";
 import {
   songs,
   difficultyLabels,
@@ -12,11 +12,14 @@ import {
   calcGrade,
   GRADE_COLORS,
   GRADE_ORDER,
+  CHART_DIFFICULTIES,
+  CHART_DIFFICULTY_INFO,
   type Grade,
 } from "./songs";
 
 interface ScoreBookProps {
   initialSongId?: string | null;
+  initialDifficulty?: ChartDifficulty | null;
   onBack: () => void;
 }
 
@@ -26,15 +29,19 @@ function formatTime(ts: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function ScoreBook({ initialSongId, onBack }: ScoreBookProps) {
+export default function ScoreBook({ initialSongId, initialDifficulty, onBack }: ScoreBookProps) {
   const [activeSongId, setActiveSongId] = useState<string>(
     initialSongId || songs[0].id
   );
+  const [activeDifficulty, setActiveDifficulty] = useState<ChartDifficulty>(
+    initialDifficulty || "standard"
+  );
 
   const activeSong = songs.find((s) => s.id === activeSongId) || songs[0];
-  const records: PlayRecord[] = getPlayRecords(activeSongId)
+  const activeDiffInfo = CHART_DIFFICULTY_INFO[activeDifficulty];
+  const records: PlayRecord[] = getPlayRecords(activeSongId, activeDifficulty)
     .sort((a, b) => b.completedAt - a.completedAt);
-  const best = getSongBestScore(activeSongId);
+  const best = getSongBestScore(activeSongId, activeDifficulty);
 
   const recentStats = useMemo(() => {
     if (records.length === 0) return null;
@@ -86,7 +93,9 @@ export default function ScoreBook({ initialSongId, onBack }: ScoreBookProps) {
         <nav className="scorebook-sidebar">
           {songs.map((song) => {
             const isActive = song.id === activeSongId;
-            const songBest = getSongBestScore(song.id);
+            const songBest = Math.max(
+              ...CHART_DIFFICULTIES.map((d) => getSongBestScore(song.id, d))
+            );
             return (
               <button
                 key={song.id}
@@ -111,7 +120,7 @@ export default function ScoreBook({ initialSongId, onBack }: ScoreBookProps) {
                     {song.title}
                   </span>
                   <span className="scorebook-song-tab-best">
-                    {songBest.toLocaleString()}
+                    {songBest > 0 ? songBest.toLocaleString() : "未演奏"}
                   </span>
                 </div>
               </button>
@@ -148,8 +157,32 @@ export default function ScoreBook({ initialSongId, onBack }: ScoreBookProps) {
                   {activeSong.difficultyLevel}
                 </span>
                 <span className="scorebook-best-badge">
-                  最高分 {best.toLocaleString()}
+                  {activeDiffInfo.label} 最高分 {best.toLocaleString()}
                 </span>
+              </div>
+              <div className="scorebook-difficulty-switcher">
+                {CHART_DIFFICULTIES.map((d) => {
+                  const info = CHART_DIFFICULTY_INFO[d];
+                  const isActive = d === activeDifficulty;
+                  const diffBest = getSongBestScore(activeSong.id, d);
+                  return (
+                    <button
+                      key={d}
+                      className={`scorebook-diff-btn ${isActive ? "active" : ""}`}
+                      style={{
+                        backgroundColor: isActive ? info.color : "transparent",
+                        color: isActive ? "white" : info.color,
+                        borderColor: info.color,
+                      }}
+                      onClick={() => setActiveDifficulty(d)}
+                    >
+                      {info.label}
+                      <span className="scorebook-diff-best">
+                        {diffBest > 0 ? diffBest.toLocaleString() : "—"}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -166,7 +199,7 @@ export default function ScoreBook({ initialSongId, onBack }: ScoreBookProps) {
                 <div className="scorebook-summary">
                   <div className="summary-header">
                     <span className="summary-title">
-                      最近 {recentStats.count} 次统计
+                      {activeDiffInfo.label} · 最近 {recentStats.count} 次统计
                     </span>
                   </div>
                   <div className="summary-cards">
@@ -213,7 +246,7 @@ export default function ScoreBook({ initialSongId, onBack }: ScoreBookProps) {
               )}
 
               <div className="scorebook-records-header">
-                <span>最近 {records.length} 次游玩</span>
+                <span>{activeDiffInfo.label} · 最近 {records.length} 次游玩</span>
               </div>
               {records.map((record, idx) => {
                 const isBest = record.score >= best && best > 0;

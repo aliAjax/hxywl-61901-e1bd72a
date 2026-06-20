@@ -6,9 +6,9 @@ import Tutorial from "./Tutorial";
 import ScoreBook from "./ScoreBook";
 import Calibration from "./Calibration";
 import Settings from "./Settings";
-import type { Song, PageType, ResourceInitResult, PracticeSegment } from "./types";
+import type { Song, PageType, ResourceInitResult, PracticeSegment, ChartDifficulty } from "./types";
 import { songs, isTutorialCompleted } from "./songs";
-import { resourceManager } from "./resourceManager";
+import { resourceManager, CHART_DIFFICULTIES } from "./resourceManager";
 
 const game = {
   id: "hxywl-61901",
@@ -22,6 +22,8 @@ function App() {
   const [selectedSongId, setSelectedSongId] = useState<string | null>(
     songs[0].id
   );
+  const [selectedDifficulty, setSelectedDifficulty] = useState<ChartDifficulty>("standard");
+  const [scorebookDifficulty, setScorebookDifficulty] = useState<ChartDifficulty | null>(null);
   const [initChecked, setInitChecked] = useState(false);
   const [initResult, setInitResult] = useState<ResourceInitResult | null>(null);
   const [resourceWarning, setResourceWarning] = useState<string | null>(null);
@@ -70,14 +72,20 @@ function App() {
     setSelectedSongId(song.id);
   }
 
-  function handleStartPlay(song: Song) {
+  function handleSelectDifficulty(difficulty: ChartDifficulty) {
+    setSelectedDifficulty(difficulty);
+  }
+
+  function handleStartPlay(song: Song, difficulty: ChartDifficulty) {
     setSelectedSongId(song.id);
+    setSelectedDifficulty(difficulty);
     setPracticeSegment(null);
     setPage("play");
   }
 
-  function handleStartPractice(songId: string, startMs: number, endMs: number) {
+  function handleStartPractice(songId: string, difficulty: ChartDifficulty, startMs: number, endMs: number) {
     setSelectedSongId(songId);
+    setSelectedDifficulty(difficulty);
     setPracticeSegment({ startMs, endMs });
     setPage("play");
   }
@@ -99,8 +107,9 @@ function App() {
     setPage("select");
   }
 
-  function handleOpenScorebook(songId?: string | null) {
+  function handleOpenScorebook(songId?: string | null, difficulty?: ChartDifficulty | null) {
     setScorebookSongId(songId || selectedSongId);
+    setScorebookDifficulty(difficulty ?? selectedDifficulty);
     setPage("scorebook");
   }
 
@@ -175,7 +184,9 @@ function App() {
       {page === "select" && (
         <SongSelect
           selectedSongId={selectedSongId}
+          selectedDifficulty={selectedDifficulty}
           onSelectSong={handleSelectSong}
+          onSelectDifficulty={handleSelectDifficulty}
           onStartPlay={handleStartPlay}
           onStartTutorial={handleStartTutorial}
           onOpenScorebook={handleOpenScorebook}
@@ -187,6 +198,7 @@ function App() {
       {page === "play" && (
         <GamePlay
           song={selectedSong}
+          difficulty={selectedDifficulty}
           onBack={handleBackToSelect}
           onOpenScorebook={handleOpenScorebook}
           practiceSegment={practiceSegment}
@@ -196,6 +208,7 @@ function App() {
       {page === "scorebook" && (
         <ScoreBook
           initialSongId={scorebookSongId}
+          initialDifficulty={scorebookDifficulty}
           onBack={handleBackFromScorebook}
         />
       )}

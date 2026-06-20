@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Chart, ChartNote } from "./types";
+import type { Chart, ChartNote, ChartDifficulty } from "./types";
 import { getChartForSong } from "./charts";
 import { formatDuration } from "./songs";
 
 interface ChartPreviewProps {
   songId: string;
+  difficulty: ChartDifficulty;
   duration: number;
   coverColor: string;
   accentColor: string;
@@ -20,12 +21,13 @@ const PRACTICE_DURATION_MS = 20000;
 
 export default function ChartPreview({
   songId,
+  difficulty,
   duration,
   coverColor,
   accentColor,
   onStartPractice,
 }: ChartPreviewProps) {
-  const chart = useMemo<Chart>(() => getChartForSong(songId), [songId]);
+  const chart = useMemo<Chart>(() => getChartForSong(songId, difficulty), [songId, difficulty]);
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewportLeft, setViewportLeft] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);

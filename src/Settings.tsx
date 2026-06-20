@@ -101,15 +101,12 @@ export default function Settings({
       id: "rebuild-charts",
       icon: "🎼",
       title: "重建所有谱面",
-      desc: "重新生成所有歌曲的谱面数据（不会影响分数和记录）",
+      desc: "重新生成所有歌曲的所有难度谱面（轻松/标准/挑战），不会影响分数和记录",
       actionLabel: "重建",
       onClick: () => {
-        if (window.confirm("确定要重建所有谱面吗？")) {
-          const songs = resourceManager.getSongs();
-          for (const s of songs) {
-            resourceManager.rebuildChart(s.id);
-          }
-          showMessage("谱面已全部重建");
+        if (window.confirm("确定要重建所有难度的谱面吗？")) {
+          resourceManager.rebuildAllCharts();
+          showMessage("所有难度的谱面已重建");
         }
       },
     },

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Song, PracticeSegment, EffectiveCalibration } from "./types";
+import type { Song, PracticeSegment, EffectiveCalibration, ChartDifficulty } from "./types";
 import type { ActiveNote, GameStats, JudgeType, NoteType } from "./types";
 import {
   difficultyLabels,
@@ -13,6 +13,7 @@ import {
   saveSongCalibrationOffset,
   resetSongCalibrationOffset,
   getSongCalibrationOffset,
+  CHART_DIFFICULTY_INFO,
 } from "./songs";
 import {
   ChartPlayer, type SpawnedNote, HIT_ZONE_RELATIVE, type NoteVisualUpdate
@@ -22,8 +23,9 @@ import { getChartForSong } from "./charts";
 
 interface GamePlayProps {
   song: Song;
+  difficulty: ChartDifficulty;
   onBack: () => void;
-  onOpenScorebook: (songId?: string | null) => void;
+  onOpenScorebook: (songId?: string | null, difficulty?: ChartDifficulty | null) => void;
   practiceSegment?: PracticeSegment | null;
 }
 
@@ -40,7 +42,8 @@ function getOrientation(): Orientation {
   return h >= w ? "portrait" : "landscape";
 }
 
-export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegment }: GamePlayProps) {
+export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, practiceSegment }: GamePlayProps) {
+  const chartDiffInfo = CHART_DIFFICULTY_INFO[difficulty];
   const playerRef = useRef<ChartPlayer | null>(null);
   const tracksContainerRef = useRef<HTMLDivElement | null>(null);
   const [started, setStarted] = useState(false);
@@ -83,7 +86,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
   const [tempSongOffset, setTempSongOffset] = useState(0);
 
   const isPractice = !!practiceSegment;
-  const bestScore = useMemo(() => getSongBestScore(song.id), [song.id]);
+  const bestScore = useMemo(() => getSongBestScore(song.id, difficulty), [song.id, difficulty]);
   const finalStatsRef = useRef<GameStats | null>(null);
   const activePointersRef = useRef<Map<number, number>>(new Map());
 
@@ -246,6 +249,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
     }, {
       practiceStartMs: practiceSegment?.startMs,
       practiceEndMs: practiceSegment?.endMs,
+      difficulty,
     });
     playerRef.current = player;
 
@@ -253,7 +257,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
       player.destroy();
       playerRef.current = null;
     };
-  }, [song.id, practiceSegment?.startMs, practiceSegment?.endMs]);
+  }, [song.id, difficulty, practiceSegment?.startMs, practiceSegment?.endMs]);
 
   useEffect(() => {
     const songOffset = getSongCalibrationOffset(song.id);
@@ -281,10 +285,11 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
       if (!isPractice) {
         const finalScore = finalStatsRef.current.score;
         if (finalScore > 0) {
-          saveSongBestScore(song.id, finalScore);
+          saveSongBestScore(song.id, difficulty, finalScore);
         }
         savePlayRecord({
           songId: song.id,
+          difficulty,
           score: finalScore,
           maxCombo: finalStatsRef.current.maxCombo,
           perfectCount: finalStatsRef.current.perfectCount,
@@ -301,7 +306,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
       }
       setSavedRecord(true);
     }
-  }, [finished, savedRecord, song.id, isPractice]);
+  }, [finished, savedRecord, song.id, difficulty, isPractice]);
 
   function handleStart() {
     setStarted(true);
@@ -482,7 +487,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
 
   const isPlaying = started && !paused && !finished;
 
-  const chart = useMemo(() => getChartForSong(song.id), [song.id]);
+  const chart = useMemo(() => getChartForSong(song.id, difficulty), [song.id, difficulty]);
   const segmentNotes = useMemo(() => {
     if (!practiceSegment) return chart.notes;
     return chart.notes.filter(
@@ -521,7 +526,13 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
           <h2 className="play-song-title">{song.title}</h2>
           <span
             className="play-song-diff"
-            style={{ backgroundColor: difficultyColors[song.difficulty] }}
+            style={{ backgroundColor: chartDiffInfo.color }}
+          >
+            {chartDiffInfo.label} 谱面
+          </span>
+          <span
+            className="play-song-diff"
+            style={{ backgroundColor: difficultyColors[song.difficulty], opacity: 0.8 }}
           >
             {difficultyLabels[song.difficulty]} Lv.{song.difficultyLevel}
           </span>
@@ -842,11 +853,20 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
               <div className="practice-start-badge">🎯 分段练习 · {practiceDurationSec}s</div>
             )}
             <div className="meta">
-              <span style={{ backgroundColor: difficultyColors[song.difficulty] }}>
+              <span style={{ backgroundColor: chartDiffInfo.color }}>
+                {chartDiffInfo.label} 谱面
+              </span>
+              <span style={{ backgroundColor: difficultyColors[song.difficulty], opacity: 0.8 }}>
                 {difficultyLabels[song.difficulty]} Lv.{song.difficultyLevel}
               </span>
               <span>{song.artist}</span>
               <span>{formatDuration(song.duration)}</span>
+            </div>
+            <div className="meta" style={{ marginTop: 4, fontSize: 12 }}>
+              <span>🎵 总音符 {chart.totalNotes}</span>
+              <span>👆 点击 {chart.totalTapNotes}</span>
+              <span>🖱 长按 {chart.totalLongNotes}</span>
+              <span>🔥 高潮段 {chart.chorusCount ?? 0}</span>
             </div>
             {isPractice ? (
               <p className="start-tip">
@@ -861,7 +881,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
             )}
             {!isPractice && (
               <p className="best-score">
-                最高分：<strong>{bestScore.toLocaleString()}</strong>
+                {chartDiffInfo.label}最高分：<strong>{bestScore.toLocaleString()}</strong>
               </p>
             )}
             <p className="start-keys">
@@ -899,6 +919,20 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
               <div className="practice-result-badge">🎯 练习记录</div>
             )}
             <h2>{isPractice ? "练习结束" : "演奏结束"}</h2>
+            <div
+              style={{
+                display: "inline-block",
+                padding: "4px 12px",
+                borderRadius: 12,
+                fontSize: 13,
+                color: "white",
+                fontWeight: 600,
+                backgroundColor: chartDiffInfo.color,
+                marginBottom: 10,
+              }}
+            >
+              {chartDiffInfo.label} 谱面
+            </div>
             <div className="result-score">{score.toLocaleString()}</div>
             <div className="result-grade">
               {perfectCount === totalNotes && totalNotes > 0
@@ -1093,7 +1127,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
               {!isPractice && (
                 <button
                   className="ghost-btn"
-                  onClick={() => onOpenScorebook(song.id)}
+                  onClick={() => onOpenScorebook(song.id, difficulty)}
                 >
                   📖 成绩册
                 </button>

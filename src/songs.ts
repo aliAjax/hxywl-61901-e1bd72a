@@ -1,4 +1,4 @@
-import type { Song, PlayRecord } from "./types";
+import type { Song, PlayRecord, ChartDifficulty } from "./types";
 import {
   resourceManager,
   defaultSongs,
@@ -7,6 +7,8 @@ import {
   difficultyLabels,
   difficultyColors,
   formatDuration,
+  CHART_DIFFICULTIES,
+  CHART_DIFFICULTY_INFO,
 } from "./resourceManager";
 
 export interface TutorialStep {
@@ -43,18 +45,18 @@ export const songs = new Proxy<Song[]>([] as Song[], {
   },
 });
 
-export { tutorialSong, syncTestSong, difficultyLabels, difficultyColors, formatDuration };
+export { tutorialSong, syncTestSong, difficultyLabels, difficultyColors, formatDuration, CHART_DIFFICULTIES, CHART_DIFFICULTY_INFO };
 
-export function getSongBestScore(songId: string): number {
-  return resourceManager.getBestScore(songId);
+export function getSongBestScore(songId: string, difficulty: ChartDifficulty = "standard"): number {
+  return resourceManager.getBestScore(songId, difficulty);
 }
 
-export function saveSongBestScore(songId: string, score: number): void {
-  resourceManager.saveBestScore(songId, score);
+export function saveSongBestScore(songId: string, difficulty: ChartDifficulty, score: number): void {
+  resourceManager.saveBestScore(songId, difficulty, score);
 }
 
-export function getPlayRecords(songId?: string): PlayRecord[] {
-  return resourceManager.getPlayRecords(songId);
+export function getPlayRecords(songId?: string, difficulty?: ChartDifficulty): PlayRecord[] {
+  return resourceManager.getPlayRecords(songId, difficulty);
 }
 
 export function savePlayRecord(record: PlayRecord): void {

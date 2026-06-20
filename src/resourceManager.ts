@@ -9,12 +9,38 @@ import type {
   ResourceInitResult,
   CalibrationData,
   EffectiveCalibration,
+  ChartDifficulty,
+  ChartDifficultyInfo,
 } from "./types";
 
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 const CURRENT_SONGS_VERSION = 1;
-const CURRENT_CHARTS_VERSION = 1;
-const CURRENT_SCORES_VERSION = 1;
+const CURRENT_CHARTS_VERSION = 2;
+const CURRENT_SCORES_VERSION = 2;
+
+export const CHART_DIFFICULTIES: ChartDifficulty[] = ["casual", "standard", "challenge"];
+
+export const CHART_DIFFICULTY_INFO: Record<ChartDifficulty, ChartDifficultyInfo> = {
+  casual: { level: 1, label: "轻松", color: "#10b981" },
+  standard: { level: 2, label: "标准", color: "#06b6d4" },
+  challenge: { level: 3, label: "挑战", color: "#f97316" },
+};
+
+function makeChartKey(songId: string, difficulty: ChartDifficulty): string {
+  return `${songId}__${difficulty}`;
+}
+
+function parseChartKey(key: string): { songId: string; difficulty: ChartDifficulty } | null {
+  const parts = key.split("__");
+  if (parts.length !== 2) return null;
+  const [songId, difficulty] = parts;
+  if (!CHART_DIFFICULTIES.includes(difficulty as ChartDifficulty)) return null;
+  return { songId, difficulty: difficulty as ChartDifficulty };
+}
+
+function makeScoreKey(songId: string, difficulty: ChartDifficulty): string {
+  return `${songId}__${difficulty}`;
+}
 
 const STORAGE_KEYS = {
   VERSION: "rhythm-resource-version",
@@ -156,7 +182,52 @@ class SeededRandom {
   }
 }
 
-function buildSyncTestChart(song: Song): Chart {
+function countChorusSections(notes: ChartNote[], totalDuration: number): number {
+  const DENSITY_WINDOW_MS = 2000;
+  const windows: { time: number; count: number }[] = [];
+  const step = DENSITY_WINDOW_MS / 2;
+  for (let t = 0; t < totalDuration; t += step) {
+    const windowStart = t;
+    const windowEnd = t + DENSITY_WINDOW_MS;
+    let count = 0;
+    for (const note of notes) {
+      if (note.time >= windowStart && note.time < windowEnd) {
+        count++;
+      }
+    }
+    windows.push({ time: t + DENSITY_WINDOW_MS / 2, count });
+  }
+  const maxCount = Math.max(...windows.map((w) => w.count), 1);
+  const densityData = windows.map((w) => ({
+    time: w.time,
+    density: w.count / maxCount,
+    isPeak: w.count / maxCount > 0.7,
+  }));
+  const sections: { start: number; end: number }[] = [];
+  let inPeak = false;
+  let peakStart = 0;
+  for (const d of densityData) {
+    if (d.isPeak && !inPeak) {
+      inPeak = true;
+      peakStart = d.time - DENSITY_WINDOW_MS / 2;
+    } else if (!d.isPeak && inPeak) {
+      inPeak = false;
+      sections.push({
+        start: peakStart,
+        end: d.time - DENSITY_WINDOW_MS / 2,
+      });
+    }
+  }
+  if (inPeak) {
+    sections.push({
+      start: peakStart,
+      end: totalDuration,
+    });
+  }
+  return sections.filter((s) => s.end - s.start > DENSITY_WINDOW_MS * 1.5).length;
+}
+
+function buildSyncTestChart(song: Song, difficulty: ChartDifficulty): Chart {
   const notes: ChartNote[] = [];
   const audioBeats: Chart["audioBeats"] = [];
   const beatMs = 60000 / song.bpm;
@@ -165,8 +236,11 @@ function buildSyncTestChart(song: Song): Chart {
   const outroMs = 2000;
   let noteId = 0;
 
+  const diffInfo = CHART_DIFFICULTY_INFO[difficulty];
+  const densityMultiplier = diffInfo.level === 1 ? 0.5 : diffInfo.level === 2 ? 1 : 1.4;
+
   const trackPattern = [0, 1, 2, 3, 0, 1, 2, 3];
-  const subdivision = 4;
+  const subdivision = diffInfo.level === 1 ? 2 : diffInfo.level === 2 ? 4 : 4;
   const stepMs = beatMs / subdivision;
 
   for (let t = introMs; t < totalDuration - outroMs; t += stepMs) {
@@ -191,9 +265,11 @@ function buildSyncTestChart(song: Song): Chart {
       const track = trackPattern[patternIdx];
 
       const isCheckpointBeat = beatIndex > 0 && beatIndex % 60 === 0;
+      const shouldAdd = Math.random() < densityMultiplier;
 
-      if (isCheckpointBeat) {
-        for (let tr = 0; tr < 4; tr++) {
+      if (isCheckpointBeat && diffInfo.level >= 2) {
+        const trCount = diffInfo.level === 3 ? 4 : 2;
+        for (let tr = 0; tr < trCount; tr++) {
           notes.push({
             id: noteId++,
             time: Math.round(t),
@@ -201,15 +277,15 @@ function buildSyncTestChart(song: Song): Chart {
             type: "tap",
           });
         }
-      } else if (beatIndex % 8 === 0 && beatIndex > 0) {
+      } else if (beatIndex % 8 === 0 && beatIndex > 0 && diffInfo.level >= 2 && shouldAdd) {
         notes.push({
           id: noteId++,
           time: Math.round(t),
           track: track,
           type: "long",
-          duration: Math.round(beatMs * 2),
+          duration: Math.round(beatMs * (diffInfo.level === 3 ? 2 : 1.5)),
         });
-      } else {
+      } else if (shouldAdd) {
         notes.push({
           id: noteId++,
           time: Math.round(t),
@@ -224,7 +300,7 @@ function buildSyncTestChart(song: Song): Chart {
         freq: MELODY_SCALE[melodyIdx] * 2,
         type: "melody",
       });
-    } else if (subIndex === 2 && beatIndex % 4 !== 0) {
+    } else if (subIndex === 2 && beatIndex % 4 !== 0 && diffInfo.level >= 2 && Math.random() < densityMultiplier) {
       const offbeatTrack = trackPattern[(beatIndex + 2) % trackPattern.length];
       notes.push({
         id: noteId++,
@@ -232,44 +308,58 @@ function buildSyncTestChart(song: Song): Chart {
         track: offbeatTrack,
         type: "tap",
       });
+    } else if (diffInfo.level === 3 && subIndex % 2 === 1 && Math.random() < densityMultiplier * 0.5) {
+      const extraTrack = trackPattern[(beatIndex + subIndex) % trackPattern.length];
+      notes.push({
+        id: noteId++,
+        time: Math.round(t),
+        track: extraTrack,
+        type: "tap",
+      });
     }
   }
 
   const totalTapNotes = notes.filter((n) => n.type === "tap").length;
   const totalLongNotes = notes.filter((n) => n.type === "long").length;
+  const chorusCount = countChorusSections(notes, totalDuration);
 
   return {
     songId: song.id,
+    difficulty,
     totalNotes: notes.length,
     totalTapNotes,
     totalLongNotes,
+    chorusCount,
     notes,
     audioBeats: audioBeats.sort((a, b) => a.time - b.time),
   };
 }
 
-function buildChartForSong(song: Song): Chart {
+function buildChartForSong(song: Song, difficulty: ChartDifficulty): Chart {
   if (song.id === "sync-test-001") {
-    return buildSyncTestChart(song);
+    return buildSyncTestChart(song, difficulty);
   }
 
-  const rng = new SeededRandom(song.id);
+  const diffInfo = CHART_DIFFICULTY_INFO[difficulty];
+  const seedSuffix = diffInfo.level === 1 ? "_casual" : diffInfo.level === 2 ? "_standard" : "_challenge";
+  const rng = new SeededRandom(song.id + seedSuffix);
   const notes: ChartNote[] = [];
   const audioBeats: Chart["audioBeats"] = [];
   const beatMs = 60000 / song.bpm;
   const totalDuration = song.duration * 1000;
 
+  const baseDensityLevel = diffInfo.level === 1 ? 2 : diffInfo.level === 2 ? 5 : 9;
   const noteDensity = Math.min(
     1,
-    0.12 + song.difficultyLevel * 0.065
+    0.1 + baseDensityLevel * 0.07
   );
-  const doubleChance = Math.min(0.5, song.difficultyLevel * 0.04);
-  const longNoteChance = Math.min(0.35, 0.05 + song.difficultyLevel * 0.03);
+  const doubleChance = diffInfo.level === 1 ? 0 : diffInfo.level === 2 ? Math.min(0.3, baseDensityLevel * 0.03) : Math.min(0.55, baseDensityLevel * 0.05);
+  const longNoteChance = diffInfo.level === 1 ? 0.08 : diffInfo.level === 2 ? 0.18 : Math.min(0.4, 0.1 + baseDensityLevel * 0.03);
   const introMs = 2000;
   const outroMs = 2000;
   let noteId = 0;
 
-  const subdivision = song.difficultyLevel <= 3 ? 2 : song.difficultyLevel <= 7 ? 4 : 8;
+  const subdivision = diffInfo.level === 1 ? 2 : diffInfo.level === 2 ? 4 : 8;
   const stepMs = beatMs / subdivision;
 
   const pattern = song.previewPattern.length > 0 ? song.previewPattern : [0, 1, 2, 3];
@@ -306,15 +396,15 @@ function buildChartForSong(song: Song): Chart {
     if (onStrongBeat) {
       spawnNote = rng.next() < noteDensity * 1.3;
     } else if (onMediumBeat) {
-      spawnNote = rng.next() < noteDensity * 0.8;
+      spawnNote = rng.next() < noteDensity * (diffInfo.level === 1 ? 0.5 : 0.8);
     } else {
-      spawnNote = rng.next() < noteDensity * 0.35;
+      spawnNote = rng.next() < noteDensity * (diffInfo.level === 1 ? 0.15 : diffInfo.level === 2 ? 0.35 : 0.55);
     }
 
     if (spawnNote) {
       const baseTrack = pattern[Math.floor(noteId / 2) % pattern.length];
       let track = baseTrack;
-      if (!onStrongBeat && rng.next() < 0.3) {
+      if (!onStrongBeat && diffInfo.level >= 2 && rng.next() < 0.3) {
         track = (track + 1 + rng.nextInt(0, 1)) % TRACK_COUNT;
       }
 
@@ -327,7 +417,12 @@ function buildChartForSong(song: Song): Chart {
 
       if (onStrongBeat && rng.next() < longNoteChance) {
         noteType = "long";
-        noteDuration = longDurations[rng.nextInt(0, longDurations.length - 1)];
+        const durationIdx = diffInfo.level === 1
+          ? rng.nextInt(0, 1)
+          : diffInfo.level === 2
+          ? rng.nextInt(0, longDurations.length - 2)
+          : rng.nextInt(0, longDurations.length - 1);
+        noteDuration = longDurations[durationIdx];
         skipUntil[track] = t + noteDuration + stepMs;
       }
 
@@ -366,12 +461,15 @@ function buildChartForSong(song: Song): Chart {
 
   const totalTapNotes = notes.filter((n) => n.type === "tap").length;
   const totalLongNotes = notes.filter((n) => n.type === "long").length;
+  const chorusCount = countChorusSections(notes, totalDuration);
 
   return {
     songId: song.id,
+    difficulty,
     totalNotes: notes.length,
     totalTapNotes,
     totalLongNotes,
+    chorusCount,
     notes,
     audioBeats: audioBeats.sort((a, b) => a.time - b.time),
   };
@@ -417,6 +515,7 @@ function isValidChart(chart: unknown): chart is Chart {
   const c = chart as Record<string, unknown>;
   return (
     typeof c.songId === "string" &&
+    (typeof c.difficulty === "string" || c.difficulty === undefined) &&
     typeof c.totalNotes === "number" &&
     typeof c.totalTapNotes === "number" &&
     typeof c.totalLongNotes === "number" &&
@@ -430,6 +529,7 @@ function isValidPlayRecord(record: unknown): record is PlayRecord {
   const r = record as Record<string, unknown>;
   return (
     typeof r.songId === "string" &&
+    (typeof r.difficulty === "string" || r.difficulty === undefined) &&
     typeof r.score === "number" &&
     typeof r.maxCombo === "number" &&
     typeof r.perfectCount === "number" &&
@@ -520,17 +620,24 @@ class ResourceManager {
     const rawCharts = localStorage.getItem(STORAGE_KEYS.CHARTS);
     if (!rawCharts) {
       report.ok = false;
-      report.missingCharts = defaultSongs.map((s) => s.id);
+      for (const def of defaultSongs) {
+        for (const diff of CHART_DIFFICULTIES) {
+          report.missingCharts.push(makeChartKey(def.id, diff));
+        }
+      }
     } else {
       const parsed = safeParseJSON<Record<string, Chart>>(rawCharts, {});
       for (const def of defaultSongs) {
-        const found = parsed[def.id];
-        if (!found) {
-          report.ok = false;
-          report.missingCharts.push(def.id);
-        } else if (!isValidChart(found)) {
-          report.ok = false;
-          report.corruptedCharts.push(def.id);
+        for (const diff of CHART_DIFFICULTIES) {
+          const key = makeChartKey(def.id, diff);
+          const found = parsed[key];
+          if (!found) {
+            report.ok = false;
+            report.missingCharts.push(key);
+          } else if (!isValidChart(found)) {
+            report.ok = false;
+            report.corruptedCharts.push(key);
+          }
         }
       }
     }
@@ -568,7 +675,10 @@ class ResourceManager {
   private writeDefaultCharts(): void {
     const charts: Record<string, Chart> = {};
     for (const song of defaultSongs) {
-      charts[song.id] = buildChartForSong(song);
+      for (const diff of CHART_DIFFICULTIES) {
+        const key = makeChartKey(song.id, diff);
+        charts[key] = buildChartForSong(song, diff);
+      }
     }
     localStorage.setItem(STORAGE_KEYS.CHARTS, JSON.stringify(charts));
     this.memoryCache.charts = { ...charts };
@@ -577,7 +687,9 @@ class ResourceManager {
   private writeDefaultBestScores(): void {
     const scores: Record<string, number> = {};
     for (const song of defaultSongs) {
-      scores[song.id] = 0;
+      for (const diff of CHART_DIFFICULTIES) {
+        scores[makeScoreKey(song.id, diff)] = 0;
+      }
     }
     localStorage.setItem(STORAGE_KEYS.BEST_SCORES, JSON.stringify(scores));
     this.memoryCache.bestScores = { ...scores };
@@ -586,9 +698,14 @@ class ResourceManager {
   private migrateLegacyBestScores(): void {
     const scores: Record<string, number> = {};
     for (const song of defaultSongs) {
+      for (const diff of CHART_DIFFICULTIES) {
+        scores[makeScoreKey(song.id, diff)] = 0;
+      }
       const legacyKey = `rhythm-best-${song.id}`;
       const legacy = Number(localStorage.getItem(legacyKey) || 0);
-      scores[song.id] = legacy;
+      if (legacy > 0) {
+        scores[makeScoreKey(song.id, "standard")] = legacy;
+      }
       try {
         localStorage.removeItem(legacyKey);
       } catch {
@@ -599,9 +716,15 @@ class ResourceManager {
       localStorage.getItem(STORAGE_KEYS.BEST_SCORES),
       {}
     );
-    const merged = { ...scores, ...existing };
-    localStorage.setItem(STORAGE_KEYS.BEST_SCORES, JSON.stringify(merged));
-    this.memoryCache.bestScores = { ...merged };
+    for (const key of Object.keys(existing)) {
+      if (key.includes("__")) {
+        scores[key] = existing[key];
+      } else {
+        scores[makeScoreKey(key, "standard")] = existing[key];
+      }
+    }
+    localStorage.setItem(STORAGE_KEYS.BEST_SCORES, JSON.stringify(scores));
+    this.memoryCache.bestScores = { ...scores };
   }
 
   private migrateLegacyRecords(): void {
@@ -612,6 +735,7 @@ class ResourceManager {
       const parsed = safeParseJSON<PlayRecord[]>(raw, []);
       const normalized: PlayRecord[] = parsed.map((r) => ({
         songId: r.songId,
+        difficulty: r.difficulty ?? "standard",
         score: r.score,
         maxCombo: r.maxCombo,
         perfectCount: r.perfectCount,
@@ -724,7 +848,14 @@ class ResourceManager {
     );
     const filteredScores: Record<string, number> = {};
     for (const key of Object.keys(scores)) {
-      if (validSongIds.has(key) && typeof scores[key] === "number" && !Number.isNaN(scores[key])) {
+      let valid = false;
+      if (key.includes("__")) {
+        const parsed = parseChartKey(key);
+        if (parsed && validSongIds.has(parsed.songId) && typeof scores[key] === "number" && !Number.isNaN(scores[key])) {
+          valid = true;
+        }
+      }
+      if (valid) {
         filteredScores[key] = scores[key];
       } else {
         cleaned = true;
@@ -742,7 +873,10 @@ class ResourceManager {
     const filteredRecords: PlayRecord[] = [];
     for (const r of records) {
       if (validSongIds.has(r.songId) && isValidPlayRecord(r)) {
-        filteredRecords.push(r);
+        filteredRecords.push({
+          ...r,
+          difficulty: r.difficulty ?? "standard",
+        });
       } else {
         cleaned = true;
       }
@@ -856,15 +990,31 @@ class ResourceManager {
     const validSongIds = new Set(defaultSongs.map((s) => s.id));
     const mergedScores: Record<string, number> = {};
     for (const song of defaultSongs) {
-      const preserved = preservedScores[song.id];
-      mergedScores[song.id] =
-        typeof preserved === "number" && !Number.isNaN(preserved) ? preserved : 0;
+      for (const diff of CHART_DIFFICULTIES) {
+        const key = makeScoreKey(song.id, diff);
+        let score = 0;
+        const preserved = preservedScores[key];
+        if (typeof preserved === "number" && !Number.isNaN(preserved)) {
+          score = preserved;
+        } else if (diff === "standard") {
+          const legacyPreserved = preservedScores[song.id];
+          if (typeof legacyPreserved === "number" && !Number.isNaN(legacyPreserved)) {
+            score = legacyPreserved;
+          }
+        }
+        mergedScores[key] = score;
+      }
     }
     for (const key of Object.keys(preservedScores)) {
-      if (!mergedScores.hasOwnProperty(key) && validSongIds.has(key)) {
-        const val = preservedScores[key];
-        if (typeof val === "number" && !Number.isNaN(val)) {
-          mergedScores[key] = val;
+      if (!mergedScores.hasOwnProperty(key)) {
+        if (key.includes("__")) {
+          const parsed = parseChartKey(key);
+          if (parsed && validSongIds.has(parsed.songId)) {
+            const val = preservedScores[key];
+            if (typeof val === "number" && !Number.isNaN(val)) {
+              mergedScores[key] = val;
+            }
+          }
         }
       }
     }
@@ -926,73 +1076,90 @@ class ResourceManager {
     return this.getSongs().find((s) => s.id === songId);
   }
 
-  getChart(songId: string): Chart {
+  getChart(songId: string, difficulty: ChartDifficulty = "standard"): Chart {
     this.ensureInitialized();
-    if (!this.memoryCache.charts[songId]) {
+    const key = makeChartKey(songId, difficulty);
+    if (!this.memoryCache.charts[key]) {
       const all = safeParseJSON<Record<string, Chart>>(
         localStorage.getItem(STORAGE_KEYS.CHARTS),
         {}
       );
-      if (all[songId] && isValidChart(all[songId])) {
-        this.memoryCache.charts[songId] = all[songId];
+      if (all[key] && isValidChart(all[key])) {
+        this.memoryCache.charts[key] = all[key];
       } else {
         const song = this.getSongById(songId);
         if (song) {
-          const chart = buildChartForSong(song);
-          all[songId] = chart;
+          const chart = buildChartForSong(song, difficulty);
+          all[key] = chart;
           localStorage.setItem(STORAGE_KEYS.CHARTS, JSON.stringify(all));
-          this.memoryCache.charts[songId] = chart;
+          this.memoryCache.charts[key] = chart;
         } else {
           throw new Error(`Song not found: ${songId}`);
         }
       }
     }
-    return this.memoryCache.charts[songId];
+    return this.memoryCache.charts[key];
   }
 
-  rebuildChart(songId: string): Chart {
+  rebuildChart(songId: string, difficulty: ChartDifficulty = "standard"): Chart {
     const song = this.getSongById(songId);
     if (!song) {
       throw new Error(`Song not found: ${songId}`);
     }
-    const chart = buildChartForSong(song);
+    const chart = buildChartForSong(song, difficulty);
+    const key = makeChartKey(songId, difficulty);
     const all = safeParseJSON<Record<string, Chart>>(
       localStorage.getItem(STORAGE_KEYS.CHARTS),
       {}
     );
-    all[songId] = chart;
+    all[key] = chart;
     localStorage.setItem(STORAGE_KEYS.CHARTS, JSON.stringify(all));
-    this.memoryCache.charts[songId] = chart;
+    this.memoryCache.charts[key] = chart;
     return chart;
   }
 
-  getBestScore(songId: string): number {
+  rebuildAllChartsForSong(songId: string): void {
+    for (const diff of CHART_DIFFICULTIES) {
+      this.rebuildChart(songId, diff);
+    }
+  }
+
+  rebuildAllCharts(): void {
+    const songs = this.getSongs();
+    for (const s of songs) {
+      this.rebuildAllChartsForSong(s.id);
+    }
+  }
+
+  getBestScore(songId: string, difficulty: ChartDifficulty = "standard"): number {
     this.ensureInitialized();
-    if (typeof this.memoryCache.bestScores[songId] !== "number") {
+    const key = makeScoreKey(songId, difficulty);
+    if (typeof this.memoryCache.bestScores[key] !== "number") {
       const all = safeParseJSON<Record<string, number>>(
         localStorage.getItem(STORAGE_KEYS.BEST_SCORES),
         {}
       );
       this.memoryCache.bestScores = all;
     }
-    return this.memoryCache.bestScores[songId] || 0;
+    return this.memoryCache.bestScores[key] || 0;
   }
 
-  saveBestScore(songId: string, score: number): boolean {
+  saveBestScore(songId: string, difficulty: ChartDifficulty, score: number): boolean {
     this.ensureInitialized();
-    const current = this.getBestScore(songId);
+    const key = makeScoreKey(songId, difficulty);
+    const current = this.getBestScore(songId, difficulty);
     if (score <= current) return false;
     const all = safeParseJSON<Record<string, number>>(
       localStorage.getItem(STORAGE_KEYS.BEST_SCORES),
       {}
     );
-    all[songId] = Math.floor(score);
+    all[key] = Math.floor(score);
     localStorage.setItem(STORAGE_KEYS.BEST_SCORES, JSON.stringify(all));
-    this.memoryCache.bestScores[songId] = Math.floor(score);
+    this.memoryCache.bestScores[key] = Math.floor(score);
     return true;
   }
 
-  getPlayRecords(songId?: string): PlayRecord[] {
+  getPlayRecords(songId?: string, difficulty?: ChartDifficulty): PlayRecord[] {
     this.ensureInitialized();
     if (this.memoryCache.playRecords.length === 0) {
       const records = safeParseJSON<PlayRecord[]>(
@@ -1003,6 +1170,7 @@ class ResourceManager {
     }
     const records = this.memoryCache.playRecords.map((r) => ({
       ...r,
+      difficulty: r.difficulty ?? "standard",
       tapPerfectCount: r.tapPerfectCount ?? 0,
       tapGoodCount: r.tapGoodCount ?? 0,
       tapMissCount: r.tapMissCount ?? 0,
@@ -1011,7 +1179,14 @@ class ResourceManager {
       longMissCount: r.longMissCount ?? 0,
     }));
     if (songId) {
-      return records.filter((r) => r.songId === songId);
+      const filtered = records.filter((r) => r.songId === songId);
+      if (difficulty) {
+        return filtered.filter((r) => r.difficulty === difficulty);
+      }
+      return filtered;
+    }
+    if (difficulty) {
+      return records.filter((r) => r.difficulty === difficulty);
     }
     return records;
   }
@@ -1021,6 +1196,7 @@ class ResourceManager {
     const all = this.getPlayRecords();
     all.push({
       ...record,
+      difficulty: record.difficulty ?? "standard",
       tapPerfectCount: record.tapPerfectCount ?? 0,
       tapGoodCount: record.tapGoodCount ?? 0,
       tapMissCount: record.tapMissCount ?? 0,
@@ -1030,8 +1206,9 @@ class ResourceManager {
     });
     const grouped: Record<string, PlayRecord[]> = {};
     for (const r of all) {
-      if (!grouped[r.songId]) grouped[r.songId] = [];
-      grouped[r.songId].push(r);
+      const groupKey = `${r.songId}__${r.difficulty ?? "standard"}`;
+      if (!grouped[groupKey]) grouped[groupKey] = [];
+      grouped[groupKey].push(r);
     }
     const trimmed: PlayRecord[] = [];
     for (const key of Object.keys(grouped)) {
