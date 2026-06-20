@@ -70,6 +70,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
   const [trackHeightPx, setTrackHeightPx] = useState(0);
   const [syncDiagnostics, setSyncDiagnostics] = useState<SyncDiagnostics | null>(null);
   const [showSyncDebug, setShowSyncDebug] = useState(false);
+  const [calibrationOffset, setCalibrationOffset] = useState(getCalibrationOffset());
 
   const bestScore = useMemo(() => getSongBestScore(song.id), [song.id]);
   const finalStatsRef = useRef<GameStats | null>(null);
@@ -239,6 +240,22 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
       playerRef.current = null;
     };
   }, [song.id]);
+
+  useEffect(() => {
+    const refresh = () => {
+      setCalibrationOffset(getCalibrationOffset());
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 1000);
+    const onVisible = () => {
+      if (!document.hidden) refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   useEffect(() => {
     if (finished && !savedRecord && finalStatsRef.current) {
@@ -446,6 +463,11 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
   const H = trackHeightPx || 560;
   const hitLineY = H * HIT_ZONE_RELATIVE;
 
+  const formatOffset = (ms: number): string => {
+    if (ms === 0) return "0 ms";
+    return ms > 0 ? `+${ms} ms` : `${ms} ms`;
+  };
+
   function progressToTop(p: number): number {
     return p * hitLineY;
   }
@@ -495,6 +517,9 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
               "linear-gradient(90deg, " + song.coverColor + ", " + song.accentColor + ")",
           }}
         />
+        <span className="progress-time progress-calibration">
+          🎯 {formatOffset(calibrationOffset)}
+        </span>
         <span className="progress-time">
           {formatDuration(Math.floor(elapsed / 1000))} /{" "}
           {formatDuration(song.duration)}
