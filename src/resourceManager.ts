@@ -28,7 +28,21 @@ const TRACK_COUNT = 4;
 const MELODY_SCALE = [261.63, 293.66, 329.63, 349.23, 392.0, 440.0, 493.88, 523.25];
 const MAX_RECORDS_PER_SONG = 10;
 
+export const syncTestSong: Song = {
+  id: "sync-test-001",
+  title: "🔧 同步验证测试曲",
+  artist: "Audio Sync Engine",
+  bpm: 120,
+  difficulty: "normal",
+  difficultyLevel: 5,
+  duration: 180,
+  coverColor: "#ef4444",
+  accentColor: "#f59e0b",
+  previewPattern: [0, 1, 2, 3, 0, 1, 2, 3],
+};
+
 export const defaultSongs: Song[] = [
+  syncTestSong,
   {
     id: "song-001",
     title: "星辰序曲",
@@ -138,7 +152,103 @@ class SeededRandom {
   }
 }
 
+function buildSyncTestChart(song: Song): Chart {
+  const notes: ChartNote[] = [];
+  const audioBeats: Chart["audioBeats"] = [];
+  const beatMs = 60000 / song.bpm;
+  const totalDuration = song.duration * 1000;
+  const introMs = 2000;
+  const outroMs = 2000;
+  let noteId = 0;
+
+  const trackPattern = [0, 1, 2, 3, 0, 1, 2, 3];
+  const subdivision = 4;
+  const stepMs = beatMs / subdivision;
+
+  for (let t = introMs; t < totalDuration - outroMs; t += stepMs) {
+    const beatIndex = Math.floor(t / beatMs);
+    const subIndex = Math.floor((t - beatIndex * beatMs) / stepMs);
+    const kickOnBeat = subIndex === 0;
+    const snareOnBeat = subIndex === subdivision / 2;
+    const hihatOn = subIndex % 2 === 0;
+
+    if (kickOnBeat) {
+      audioBeats.push({ time: t, freq: 80, type: "kick" });
+    }
+    if (snareOnBeat) {
+      audioBeats.push({ time: t, freq: 220, type: "snare" });
+    }
+    if (hihatOn) {
+      audioBeats.push({ time: t, freq: 1000, type: "hihat" });
+    }
+
+    if (subIndex === 0) {
+      const patternIdx = beatIndex % trackPattern.length;
+      const track = trackPattern[patternIdx];
+
+      const isCheckpointBeat = beatIndex > 0 && beatIndex % 60 === 0;
+
+      if (isCheckpointBeat) {
+        for (let tr = 0; tr < 4; tr++) {
+          notes.push({
+            id: noteId++,
+            time: Math.round(t),
+            track: tr,
+            type: "tap",
+          });
+        }
+      } else if (beatIndex % 8 === 0 && beatIndex > 0) {
+        notes.push({
+          id: noteId++,
+          time: Math.round(t),
+          track: track,
+          type: "long",
+          duration: Math.round(beatMs * 2),
+        });
+      } else {
+        notes.push({
+          id: noteId++,
+          time: Math.round(t),
+          track,
+          type: "tap",
+        });
+      }
+
+      const melodyIdx = beatIndex % MELODY_SCALE.length;
+      audioBeats.push({
+        time: t,
+        freq: MELODY_SCALE[melodyIdx] * 2,
+        type: "melody",
+      });
+    } else if (subIndex === 2 && beatIndex % 4 !== 0) {
+      const offbeatTrack = trackPattern[(beatIndex + 2) % trackPattern.length];
+      notes.push({
+        id: noteId++,
+        time: Math.round(t),
+        track: offbeatTrack,
+        type: "tap",
+      });
+    }
+  }
+
+  const totalTapNotes = notes.filter((n) => n.type === "tap").length;
+  const totalLongNotes = notes.filter((n) => n.type === "long").length;
+
+  return {
+    songId: song.id,
+    totalNotes: notes.length,
+    totalTapNotes,
+    totalLongNotes,
+    notes,
+    audioBeats: audioBeats.sort((a, b) => a.time - b.time),
+  };
+}
+
 function buildChartForSong(song: Song): Chart {
+  if (song.id === "sync-test-001") {
+    return buildSyncTestChart(song);
+  }
+
   const rng = new SeededRandom(song.id);
   const notes: ChartNote[] = [];
   const audioBeats: Chart["audioBeats"] = [];

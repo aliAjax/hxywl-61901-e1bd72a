@@ -3,6 +3,7 @@ import {
   resourceManager,
   defaultSongs,
   tutorialSong,
+  syncTestSong,
   difficultyLabels,
   difficultyColors,
   formatDuration,
@@ -42,7 +43,7 @@ export const songs = new Proxy<Song[]>([] as Song[], {
   },
 });
 
-export { tutorialSong, difficultyLabels, difficultyColors, formatDuration };
+export { tutorialSong, syncTestSong, difficultyLabels, difficultyColors, formatDuration };
 
 export function getSongBestScore(songId: string): number {
   return resourceManager.getBestScore(songId);

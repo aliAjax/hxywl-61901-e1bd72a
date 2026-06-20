@@ -10,7 +10,10 @@ import {
   savePlayRecord,
   getCalibrationOffset,
 } from "./songs";
-import { ChartPlayer, type SpawnedNote, HIT_ZONE_RELATIVE, type NoteVisualUpdate } from "./chartPlayer";
+import {
+  ChartPlayer, type SpawnedNote, HIT_ZONE_RELATIVE, type NoteVisualUpdate
+} from "./chartPlayer";
+import type { SyncDiagnostics } from "./audioSyncEngine";
 import { getChartForSong } from "./charts";
 
 interface GamePlayProps {
@@ -65,6 +68,8 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
   const [savedRecord, setSavedRecord] = useState(false);
   const [orientation, setOrientation] = useState<Orientation>(getOrientation());
   const [trackHeightPx, setTrackHeightPx] = useState(0);
+  const [syncDiagnostics, setSyncDiagnostics] = useState<SyncDiagnostics | null>(null);
+  const [showSyncDebug, setShowSyncDebug] = useState(false);
 
   const bestScore = useMemo(() => getSongBestScore(song.id), [song.id]);
   const finalStatsRef = useRef<GameStats | null>(null);
@@ -214,6 +219,9 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
           return next;
         });
       },
+      onSyncDiagnostics: (diag: SyncDiagnostics) => {
+        setSyncDiagnostics(diag);
+      },
     });
     playerRef.current = player;
 
@@ -358,6 +366,11 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
           e.preventDefault();
           handlePauseToggle();
         }
+        return;
+      }
+      if (key === "f12") {
+        e.preventDefault();
+        setShowSyncDebug((prev) => !prev);
         return;
       }
       const keyLabels = ["d", "f", "j", "k"];
@@ -631,6 +644,103 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
           );
         })}
       </div>
+
+      {showSyncDebug && syncDiagnostics && (
+        <div className="sync-debug-panel">
+          <div className="sync-debug-header">
+            <span>🔧 同步诊断</span>
+            <button
+              className="sync-debug-close"
+              onClick={() => setShowSyncDebug(false)}
+            >
+              ✕
+            </button>
+          </div>
+          <div className="sync-debug-grid">
+            <div className="sync-debug-item">
+              <small>时钟源</small>
+              <strong className={syncDiagnostics.clockSource}>
+                {syncDiagnostics.clockSource === "wall"
+                  ? "🎯 系统时钟"
+                  : syncDiagnostics.clockSource === "audio"
+                  ? "🎵 音频时钟"
+                  : "⚡ 混合同步"}
+              </strong>
+            </div>
+            <div className="sync-debug-item">
+              <small>音频漂移</small>
+              <strong
+                className={
+                  Math.abs(syncDiagnostics.audioClockDriftMs) < 20
+                    ? "drift-good"
+                    : Math.abs(syncDiagnostics.audioClockDriftMs) < 40
+                    ? "drift-warning"
+                    : "drift-bad"
+                }
+              >
+                {syncDiagnostics.audioClockDriftMs.toFixed(1)} ms
+              </strong>
+            </div>
+            <div className="sync-debug-item">
+              <small>已播放</small>
+              <strong>{(syncDiagnostics.totalElapsedMs / 1000).toFixed(1)} s</strong>
+            </div>
+            <div className="sync-debug-item">
+              <small>音频时间</small>
+              <strong>{(syncDiagnostics.audioElapsedMs / 1000).toFixed(1)} s</strong>
+            </div>
+            <div className="sync-debug-item">
+              <small>平均帧时</small>
+              <strong
+                className={
+                  syncDiagnostics.avgFrameTimeMs < 18
+                    ? "drift-good"
+                    : syncDiagnostics.avgFrameTimeMs < 30
+                    ? "drift-warning"
+                    : "drift-bad"
+                }
+              >
+                {syncDiagnostics.avgFrameTimeMs.toFixed(1)} ms
+              </strong>
+            </div>
+            <div className="sync-debug-item">
+              <small>低帧率事件</small>
+              <strong className={syncDiagnostics.lowFrameEvents > 0 ? "drift-warning" : "drift-good"}>
+                {syncDiagnostics.lowFrameEvents}
+              </strong>
+            </div>
+            <div className="sync-debug-item">
+              <small>重同步次数</small>
+              <strong className={syncDiagnostics.resyncCount > 5 ? "drift-warning" : "drift-good"}>
+                {syncDiagnostics.resyncCount}
+              </strong>
+            </div>
+            <div className="sync-debug-item">
+              <small>页面切换</small>
+              <strong>{syncDiagnostics.visibilityChanges}</strong>
+            </div>
+            <div className="sync-debug-item">
+              <small>平滑偏移</small>
+              <strong>{syncDiagnostics.currentAudioOffsetMs.toFixed(1)} ms</strong>
+            </div>
+            <div className="sync-debug-item">
+              <small>校准偏移</small>
+              <strong>{getCalibrationOffset()} ms</strong>
+            </div>
+          </div>
+          <div className="sync-debug-hint">按 F12 关闭此面板</div>
+        </div>
+      )}
+
+      {!showSyncDebug && started && !finished && (
+        <button
+          className="sync-debug-toggle"
+          onClick={() => setShowSyncDebug(true)}
+          title="显示同步诊断 (F12)"
+        >
+          🔧
+        </button>
+      )}
 
       {!started && !finished && (
         <div className="start-overlay">

@@ -1,6 +1,7 @@
 import type { Chart, ChartNote, GameStats, JudgeType, NoteType, Song } from "./types";
 import { getChartForSong } from "./charts";
 import { getCalibrationOffset } from "./songs";
+import { AudioSyncEngine, type SyncDiagnostics } from "./audioSyncEngine";
 
 export const PERFECT_WINDOW_MS = 50;
 export const GOOD_WINDOW_MS = 110;
@@ -12,10 +13,14 @@ export const NOTE_FALL_MS = NOTE_FALL_SECONDS * 1000;
 
 export const HIT_ZONE_RELATIVE = 0.8839;
 
+const MAX_INTERPOLATION_MS = 60;
+const RESYNC_AUDIO_BEAT_THRESHOLD_MS = 30;
+
 export interface NoteVisualUpdate {
   id: number;
   progress: number;
   endProgress?: number;
+  interpolationMs: number;
 }
 
 export interface ChartPlayerCallbacks {
@@ -25,9 +30,10 @@ export interface ChartPlayerCallbacks {
   onNoteRemove: (id: number) => void;
   onJudge: (judge: JudgeType, track: number, noteType?: NoteType) => void;
   onStatsChange: (stats: GameStats) => void;
-  onTimeUpdate: (elapsedMs: number) => void;
+  onTimeUpdate: (elapsedMs: number, frameDeltaMs: number) => void;
   onFinish: (finalStats: GameStats) => void;
   onLongNoteHoldChange: (noteId: number, isHolding: boolean) => void;
+  onSyncDiagnostics?: (diagnostics: SyncDiagnostics) => void;
 }
 
 export interface SpawnedNote {
@@ -56,6 +62,7 @@ interface InternalActiveNote {
   longStartJudgeType?: JudgeType;
   longEndJudged: boolean;
   endProgress?: number;
+  lastUpdateElapsed: number;
 }
 
 export class ChartPlayer {
@@ -63,15 +70,10 @@ export class ChartPlayer {
   private chart: Chart;
   private cb: ChartPlayerCallbacks;
 
-  private state: PlayerState = "idle";
-
-  private startTime = 0;
-  private pausedAt = 0;
-  private accumulatedPauseTime = 0;
-  private pauseDurationHeldAt = new Map<number, number>();
-  private lastFrameTime = 0;
+  private syncEngine: AudioSyncEngine;
 
   private rafId: number | null = null;
+  private lastFrameTimestamp = 0;
 
   private audioCtx: AudioContext | null = null;
   private audioBeatCursor = 0;
@@ -96,26 +98,38 @@ export class ChartPlayer {
     longMissCount: 0,
   };
 
-  private calibrationOffset: number = 0;
-
   private hitSoundTimers: number[] = [];
+  private diagnosticsTimer: number | null = null;
 
   constructor(song: Song, callbacks: ChartPlayerCallbacks) {
     this.song = song;
     this.chart = getChartForSong(song.id);
     this.cb = callbacks;
-    this.calibrationOffset = getCalibrationOffset();
+
+    const calibrationOffset = getCalibrationOffset();
+    this.syncEngine = new AudioSyncEngine({
+      touchCalibrationOffsetMs: calibrationOffset,
+    });
+
     for (let i = 0; i < 4; i++) {
       this.trackHeldState.set(i, { noteId: null });
     }
   }
 
   getCalibrationOffset(): number {
-    return this.calibrationOffset;
+    return this.syncEngine.getTouchCalibrationOffset();
+  }
+
+  getTotalCalibrationOffset(): number {
+    return this.syncEngine.getTotalCalibrationOffset();
+  }
+
+  setCalibrationOffset(offsetMs: number) {
+    this.syncEngine.setTouchCalibrationOffset(offsetMs);
   }
 
   private getCalibratedElapsed(): number {
-    return this.getElapsedMs() - this.calibrationOffset;
+    return this.syncEngine.getCalibratedElapsedMs();
   }
 
   getStats(): GameStats {
@@ -127,21 +141,23 @@ export class ChartPlayer {
   }
 
   getElapsedMs(): number {
-    if (this.state === "idle") return 0;
-    if (this.state === "paused") return this.pausedAt;
-    return performance.now() - this.startTime - this.accumulatedPauseTime;
+    return this.syncEngine.getElapsedMs();
+  }
+
+  getSyncDiagnostics(): SyncDiagnostics {
+    return this.syncEngine.getDiagnostics();
   }
 
   isPlaying(): boolean {
-    return this.state === "playing";
+    return this.syncEngine.isPlaying();
   }
 
   isPaused(): boolean {
-    return this.state === "paused";
+    return this.syncEngine.isPaused();
   }
 
   isFinished(): boolean {
-    return this.state === "finished";
+    return this.syncEngine.getState() === "finished";
   }
 
   getTotalDurationMs(): number {
@@ -155,6 +171,7 @@ export class ChartPlayer {
           window.AudioContext ||
           (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         this.audioCtx = new Ctor();
+        this.syncEngine.attachAudioContext(this.audioCtx);
       }
       if (this.audioCtx.state === "suspended") {
         this.audioCtx.resume().catch(() => {});
@@ -324,7 +341,7 @@ export class ChartPlayer {
   }
 
   judgeTrackPress(track: number) {
-    if (this.state !== "playing") return;
+    if (!this.syncEngine.isPlaying()) return;
     const elapsed = this.getCalibratedElapsed();
 
     let hitNote: ChartNote | null = null;
@@ -365,7 +382,6 @@ export class ChartPlayer {
             active.longStartJudgeType = judge;
             active.longHolding = true;
             this.trackHeldState.get(track)!.noteId = hitNoteActiveId;
-            this.pauseDurationHeldAt.set(hitNoteActiveId, elapsed);
             this.cb.onNoteJudge(hitNoteActiveId, judge, "start");
             this.cb.onLongNoteHoldChange(hitNoteActiveId, true);
             this.applyJudge(judge, track, "long");
@@ -379,7 +395,7 @@ export class ChartPlayer {
   }
 
   judgeTrackRelease(track: number) {
-    if (this.state !== "playing") {
+    if (!this.syncEngine.isPlaying()) {
       const held = this.trackHeldState.get(track);
       if (held && held.noteId !== null) {
         const noteId = held.noteId;
@@ -437,14 +453,18 @@ export class ChartPlayer {
     this.cb.onNoteJudge(noteId, endJudge, "end");
     this.playHitSound(track);
     held.noteId = null;
-    this.pauseDurationHeldAt.delete(noteId);
   }
 
   private processAudioBeats(elapsed: number) {
     const endMs = this.getTotalDurationMs();
+    const audioElapsed = this.syncEngine.getAudioReferencedElapsedMs();
+    const referenceElapsed = audioElapsed !== null && Math.abs(audioElapsed - elapsed) < RESYNC_AUDIO_BEAT_THRESHOLD_MS
+      ? audioElapsed
+      : elapsed;
+
     while (
       this.audioBeatCursor < this.chart.audioBeats.length &&
-      this.chart.audioBeats[this.audioBeatCursor].time <= elapsed &&
+      this.chart.audioBeats[this.audioBeatCursor].time <= referenceElapsed &&
       this.chart.audioBeats[this.audioBeatCursor].time <= endMs
     ) {
       const beat = this.chart.audioBeats[this.audioBeatCursor];
@@ -479,6 +499,7 @@ export class ChartPlayer {
           longStartJudged: false,
           longEndJudged: false,
           endProgress,
+          lastUpdateElapsed: elapsed,
         });
         this.cb.onNoteSpawn({
           id: note.id,
@@ -493,19 +514,22 @@ export class ChartPlayer {
     }
   }
 
-  private updateActiveNotes(elapsed: number) {
+  private updateActiveNotes(elapsed: number, frameDeltaMs: number) {
     const removeIds: number[] = [];
-    const calibrated = elapsed - this.calibrationOffset;
+    const calibrated = elapsed - this.syncEngine.getTotalCalibrationOffset();
+    const interpolationMs = Math.min(frameDeltaMs * 0.5, MAX_INTERPOLATION_MS);
 
     for (const [id, active] of this.activeNotes) {
-      const newProgress = this.computeProgressFromElapsed(active.targetTime, elapsed);
+      const interpolatedElapsed = elapsed + interpolationMs;
+      const newProgress = this.computeProgressFromElapsed(active.targetTime, interpolatedElapsed);
       let endProgress: number | undefined = undefined;
       if (active.type === "long" && active.endTime !== undefined) {
-        endProgress = this.computeProgressFromElapsed(active.endTime, elapsed);
+        endProgress = this.computeProgressFromElapsed(active.endTime, interpolatedElapsed);
       }
       active.progress = newProgress;
       active.endProgress = endProgress;
-      this.cb.onNoteUpdate({ id, progress: newProgress, endProgress });
+      active.lastUpdateElapsed = elapsed;
+      this.cb.onNoteUpdate({ id, progress: newProgress, endProgress, interpolationMs });
 
       if (!active.missed) {
         if (active.type === "tap") {
@@ -540,7 +564,6 @@ export class ChartPlayer {
                 this.applyJudge("miss", active.track, "long");
                 const held = this.trackHeldState.get(active.track);
                 if (held && held.noteId === id) held.noteId = null;
-                this.pauseDurationHeldAt.delete(id);
               }
             } else {
               if (active.longStartJudgeType !== "miss") {
@@ -550,13 +573,11 @@ export class ChartPlayer {
                   active.judged = true;
                   this.cb.onNoteJudge(id, "miss", "end");
                   this.applyJudge("miss", active.track, "long");
-                  this.pauseDurationHeldAt.delete(id);
                 }
               } else {
                 if (calibrated > endTime + LONG_NOTE_END_GOOD_WINDOW_MS) {
                   active.longEndJudged = true;
                   active.judged = true;
-                  this.pauseDurationHeldAt.delete(id);
                 }
               }
             }
@@ -571,7 +592,6 @@ export class ChartPlayer {
         removeIds.push(id);
         const held = this.trackHeldState.get(active.track);
         if (held && held.noteId === id) held.noteId = null;
-        this.pauseDurationHeldAt.delete(id);
       }
     }
 
@@ -584,69 +604,79 @@ export class ChartPlayer {
   private checkFinish(elapsed: number) {
     const totalMs = this.getTotalDurationMs() + 2500;
     if (elapsed >= totalMs) {
-      this.state = "finished";
+      this.syncEngine.finish();
       if (this.rafId !== null) {
         cancelAnimationFrame(this.rafId);
         this.rafId = null;
       }
+      this.stopDiagnosticsReporting();
       this.cb.onFinish({ ...this.stats });
     }
   }
 
-  private mainLoop = () => {
-    if (this.state !== "playing") return;
-    const now = performance.now();
-    const delta = now - this.lastFrameTime;
-    this.lastFrameTime = now;
-    const elapsed = this.getElapsedMs();
+  private emitDiagnostics() {
+    if (this.cb.onSyncDiagnostics) {
+      this.cb.onSyncDiagnostics(this.syncEngine.getDiagnostics());
+    }
+  }
+
+  private startDiagnosticsReporting() {
+    this.stopDiagnosticsReporting();
+    if (this.cb.onSyncDiagnostics) {
+      this.diagnosticsTimer = window.setInterval(() => this.emitDiagnostics(), 500);
+    }
+  }
+
+  private stopDiagnosticsReporting() {
+    if (this.diagnosticsTimer !== null) {
+      clearInterval(this.diagnosticsTimer);
+      this.diagnosticsTimer = null;
+    }
+  }
+
+  private mainLoop = (timestamp: number) => {
+    if (!this.syncEngine.isPlaying()) return;
+
+    const elapsed = this.syncEngine.notifyFrame(timestamp);
+    const frameDeltaMs = this.lastFrameTimestamp > 0 ? timestamp - this.lastFrameTimestamp : 16;
+    this.lastFrameTimestamp = timestamp;
 
     this.processAudioBeats(elapsed);
     this.spawnDueNotes(elapsed);
-    this.updateActiveNotes(elapsed);
-    this.cb.onTimeUpdate(elapsed);
+    this.updateActiveNotes(elapsed, frameDeltaMs);
+    this.cb.onTimeUpdate(elapsed, frameDeltaMs);
     this.checkFinish(elapsed);
 
-    if (this.state === "playing") {
+    if (this.syncEngine.isPlaying()) {
       this.rafId = requestAnimationFrame(this.mainLoop);
     }
-    void delta;
   };
 
   start() {
-    if (this.state === "playing") return;
+    if (this.syncEngine.isPlaying()) return;
     this.ensureAudioCtx();
 
     this.resetState();
-    this.state = "playing";
-    this.startTime = performance.now();
-    this.lastFrameTime = this.startTime;
-    this.accumulatedPauseTime = 0;
+    this.syncEngine.start();
+    this.lastFrameTimestamp = performance.now();
     this.cb.onStatsChange({ ...this.stats });
+    this.startDiagnosticsReporting();
     this.rafId = requestAnimationFrame(this.mainLoop);
   }
 
   pause() {
-    if (this.state !== "playing") return;
-    this.state = "paused";
-    this.pausedAt = this.getElapsedMs();
+    if (!this.syncEngine.isPlaying()) return;
+    this.syncEngine.pause();
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
-    const elapsed = this.pausedAt;
-    for (const [id, active] of this.activeNotes) {
-      if (active.type === "long" && active.longHolding && active.longStartJudged) {
-        this.pauseDurationHeldAt.set(id, elapsed);
-      }
-    }
   }
 
   resume() {
-    if (this.state !== "paused") return;
-    this.state = "playing";
-    const now = performance.now();
-    this.accumulatedPauseTime = now - this.startTime - this.pausedAt;
-    this.lastFrameTime = now;
+    if (!this.syncEngine.isPaused()) return;
+    this.syncEngine.resume();
+    this.lastFrameTimestamp = performance.now();
     this.rafId = requestAnimationFrame(this.mainLoop);
   }
 
@@ -655,6 +685,7 @@ export class ChartPlayer {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
+    this.stopDiagnosticsReporting();
     this.start();
   }
 
@@ -676,11 +707,10 @@ export class ChartPlayer {
     };
     this.chartNoteCursor = 0;
     this.audioBeatCursor = 0;
-    this.state = "idle";
+    this.lastFrameTimestamp = 0;
     for (let i = 0; i < 4; i++) {
       this.trackHeldState.set(i, { noteId: null });
     }
-    this.pauseDurationHeldAt.clear();
   }
 
   destroy() {
@@ -688,6 +718,7 @@ export class ChartPlayer {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
+    this.stopDiagnosticsReporting();
     for (const t of this.hitSoundTimers) {
       clearTimeout(t);
     }
@@ -699,5 +730,6 @@ export class ChartPlayer {
     } catch {
       // silent
     }
+    this.syncEngine.destroy();
   }
 }
