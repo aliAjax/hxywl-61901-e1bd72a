@@ -62,7 +62,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
   const [judgeKey, setJudgeKey] = useState(0);
   const [paused, setPaused] = useState(false);
   const [finished, setFinished] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(practiceSegment?.startMs ?? 0);
   const [pressedTracks, setPressedTracks] = useState<boolean[]>(
     new Array(TRACK_COUNT).fill(false)
   );
@@ -458,9 +458,12 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
     : song.duration * 1000;
   const effectiveStartMs = practiceSegment ? practiceSegment.startMs : 0;
 
-  const progressPercent = Math.min(
-    100,
-    ((elapsed - effectiveStartMs) / (effectiveDurationMs - effectiveStartMs)) * 100
+  const progressPercent = Math.max(
+    0,
+    Math.min(
+      100,
+      ((elapsed - effectiveStartMs) / (effectiveDurationMs - effectiveStartMs)) * 100
+    )
   );
 
   const isPlaying = started && !paused && !finished;
@@ -546,7 +549,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
           🎯 {formatOffset(calibrationOffset)}
         </span>
         <span className="progress-time">
-          {formatDuration(Math.floor((elapsed - effectiveStartMs) / 1000))} /{" "}
+          {formatDuration(Math.floor(Math.max(0, elapsed - effectiveStartMs) / 1000))} /{" "}
           {formatDuration(Math.floor((effectiveDurationMs - effectiveStartMs) / 1000))}
         </span>
       </div>
