@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getCalibrationOffset, resetTutorialStatus, isTutorialCompleted } from "./songs";
+import { getCalibrationOffset, saveCalibrationOffset, resetCalibrationOffset, resetTutorialStatus, isTutorialCompleted } from "./songs";
 import { resourceManager } from "./resourceManager";
 
 interface SettingsProps {
@@ -41,16 +41,29 @@ export default function Settings({
     window.setTimeout(() => setMessage(null), 3000);
   };
 
+  const handleCalibrationIncrease = () => {
+    const current = getCalibrationOffset();
+    const newValue = current + 5;
+    saveCalibrationOffset(newValue);
+    setTick((t) => t + 1);
+    showMessage(`校准值已调整为 ${formatOffset(newValue)}`);
+  };
+
+  const handleCalibrationDecrease = () => {
+    const current = getCalibrationOffset();
+    const newValue = current - 5;
+    saveCalibrationOffset(newValue);
+    setTick((t) => t + 1);
+    showMessage(`校准值已调整为 ${formatOffset(newValue)}`);
+  };
+
+  const handleCalibrationReset = () => {
+    resetCalibrationOffset();
+    setTick((t) => t + 1);
+    showMessage("校准值已重置为 0 ms");
+  };
+
   const items: SettingItem[] = [
-    {
-      id: "calibration",
-      icon: "🎯",
-      title: "延迟校准",
-      desc: "跟随节拍点击，自动计算推荐校准值，补偿输入延迟",
-      value: formatOffset(calibrationOffset),
-      actionLabel: "去校准",
-      onClick: onOpenCalibration,
-    },
     {
       id: "tutorial",
       icon: "📘",
@@ -161,6 +174,46 @@ export default function Settings({
       )}
 
       <div className="settings-list">
+        <div className="settings-item calibration-item">
+          <div className="settings-item-icon">🎯</div>
+          <div className="settings-item-body">
+            <div className="settings-item-title">延迟校准</div>
+            <div className="settings-item-desc">手动微调校准值，以5ms为步长。正值表示系统判定提前，负值表示判定延后。自动校准仍然可以覆盖此值。</div>
+            <div className="calibration-controls">
+              <div className="calibration-value-display">
+                <span className="calibration-value-label">当前值</span>
+                <strong className="calibration-value">{formatOffset(calibrationOffset)}</strong>
+              </div>
+              <div className="calibration-buttons">
+                <button
+                  className="calibration-adjust-btn"
+                  onClick={handleCalibrationDecrease}
+                  title="减少5ms"
+                >
+                  −
+                </button>
+                <button
+                  className="calibration-adjust-btn"
+                  onClick={handleCalibrationReset}
+                  title="重置为0"
+                >
+                  0
+                </button>
+                <button
+                  className="calibration-adjust-btn"
+                  onClick={handleCalibrationIncrease}
+                  title="增加5ms"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
+          <button className="settings-item-btn" onClick={onOpenCalibration}>
+            去校准
+          </button>
+        </div>
+
         {items.map((item) => (
           <div key={item.id} className="settings-item">
             <div className="settings-item-icon">{item.icon}</div>

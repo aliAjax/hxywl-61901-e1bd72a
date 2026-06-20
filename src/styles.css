@@ -2900,6 +2900,92 @@ button {
   color: #fecaca;
 }
 
+.calibration-item {
+  grid-template-columns: 56px 1fr auto;
+}
+
+.calibration-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.calibration-value-display {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.calibration-value-label {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.calibration-value {
+  font-size: 20px;
+  font-weight: 900;
+  color: #67e8f9;
+  text-shadow: 0 0 10px rgba(103, 232, 249, 0.3);
+}
+
+.calibration-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.calibration-adjust-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(79, 70, 229, 0.4);
+  background: rgba(79, 70, 229, 0.1);
+  color: #c7d2fe;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 150ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.calibration-adjust-btn:hover {
+  background: rgba(79, 70, 229, 0.25);
+  border-color: rgba(79, 70, 229, 0.7);
+  color: #e0e7ff;
+  transform: translateY(-1px);
+}
+
+.calibration-adjust-btn:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 820px) {
+  .calibration-item {
+    grid-template-columns: 44px 1fr auto;
+  }
+
+  .calibration-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .calibration-value {
+    font-size: 18px;
+  }
+
+  .calibration-adjust-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+  }
+}
+
 .sync-debug-toggle {
   position: fixed;
   bottom: 16px;
