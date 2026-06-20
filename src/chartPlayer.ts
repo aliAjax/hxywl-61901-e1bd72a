@@ -34,6 +34,7 @@ export interface ChartPlayerCallbacks {
   onFinish: (finalStats: GameStats) => void;
   onLongNoteHoldChange: (noteId: number, isHolding: boolean) => void;
   onSyncDiagnostics?: (diagnostics: SyncDiagnostics) => void;
+  onStateChange?: (state: "idle" | "playing" | "paused" | "finished") => void;
 }
 
 export interface SpawnedNote {
@@ -101,6 +102,8 @@ export class ChartPlayer {
   private hitSoundTimers: number[] = [];
   private diagnosticsTimer: number | null = null;
 
+  private syncStateUnsub: (() => void) | null = null;
+
   constructor(song: Song, callbacks: ChartPlayerCallbacks) {
     this.song = song;
     this.chart = getChartForSong(song.id);
@@ -109,6 +112,23 @@ export class ChartPlayer {
     const calibrationOffset = getCalibrationOffset();
     this.syncEngine = new AudioSyncEngine({
       touchCalibrationOffsetMs: calibrationOffset,
+    });
+
+    this.syncStateUnsub = this.syncEngine.onStateChange((state) => {
+      if (state === "paused") {
+        if (this.rafId !== null) {
+          cancelAnimationFrame(this.rafId);
+          this.rafId = null;
+        }
+      } else if (state === "playing") {
+        if (this.rafId === null) {
+          this.lastFrameTimestamp = performance.now();
+          this.rafId = requestAnimationFrame(this.mainLoop);
+        }
+      }
+      if (this.cb.onStateChange) {
+        this.cb.onStateChange(state);
+      }
     });
 
     for (let i = 0; i < 4; i++) {
@@ -714,6 +734,10 @@ export class ChartPlayer {
   }
 
   destroy() {
+    if (this.syncStateUnsub) {
+      this.syncStateUnsub();
+      this.syncStateUnsub = null;
+    }
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;

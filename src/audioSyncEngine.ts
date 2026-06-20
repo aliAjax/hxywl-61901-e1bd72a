@@ -58,6 +58,7 @@ export class AudioSyncEngine {
   private lastKnownAudioElapsed = 0;
 
   private listeners = new Set<(elapsedMs: number, frameDeltaMs: number) => void>();
+  private stateChangeListeners = new Set<(state: SyncState) => void>();
 
   constructor(options: AudioSyncEngineOptions = {}) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
@@ -93,11 +94,26 @@ export class AudioSyncEngine {
 
   attachAudioContext(ctx: AudioContext | null) {
     this.audioCtx = ctx;
-    if (ctx && this.state === "playing") {
+    if (ctx) {
       try {
         this.audioBaseTime = ctx.currentTime * 1000;
       } catch {
         this.audioBaseTime = 0;
+      }
+    }
+  }
+
+  onStateChange(listener: (state: SyncState) => void): () => void {
+    this.stateChangeListeners.add(listener);
+    return () => this.stateChangeListeners.delete(listener);
+  }
+
+  private emitStateChange() {
+    for (const l of this.stateChangeListeners) {
+      try {
+        l(this.state);
+      } catch {
+        // ignore
       }
     }
   }
@@ -134,7 +150,9 @@ export class AudioSyncEngine {
     if (!this.audioCtx) return null;
     try {
       if (this.audioCtx.state === "closed") return null;
-      return this.audioCtx.currentTime * 1000;
+      const t = this.audioCtx.currentTime * 1000;
+      if (t <= 0) return null;
+      return t;
     } catch {
       return null;
     }
@@ -150,13 +168,7 @@ export class AudioSyncEngine {
 
     const audioElapsed = this.getAudioReferencedElapsedMs();
     if (audioElapsed !== null) {
-      const wall = this.nowWall();
-      const wallElapsed = wall - this.wallBaseTime - this.accumulatedPauseTime;
-      const drift = wallElapsed - audioElapsed;
-
-      if (Math.abs(drift) < this.options.maxAcceptableDriftMs) {
-        return Math.max(0, audioElapsed + this.smoothingResyncOffsetMs);
-      }
+      return Math.max(0, audioElapsed + this.smoothingResyncOffsetMs);
     }
 
     const wall = this.nowWall();
@@ -166,7 +178,18 @@ export class AudioSyncEngine {
 
   getAudioReferencedElapsedMs(): number | null {
     const audioNow = this.nowAudio();
-    if (audioNow === null || this.audioBaseTime === 0) return null;
+    if (audioNow === null) return null;
+
+    if (this.audioBaseTime === 0) {
+      if (this.state === "playing") {
+        const wall = this.nowWall();
+        const wallElapsed = wall - this.wallBaseTime - this.accumulatedPauseTime;
+        this.audioBaseTime = audioNow - wallElapsed;
+      } else {
+        this.audioBaseTime = audioNow;
+      }
+    }
+
     const elapsed = audioNow - this.audioBaseTime;
     this.lastKnownAudioElapsed = Math.max(0, elapsed);
     return this.lastKnownAudioElapsed;
@@ -224,16 +247,6 @@ export class AudioSyncEngine {
 
   private handleLowFrame(frameDeltaMs: number) {
     this.resyncFromWallClock();
-
-    const audioElapsed = this.getAudioReferencedElapsedMs();
-    if (audioElapsed !== null) {
-      const wallElapsed = this.getElapsedMs();
-      const drift = wallElapsed - audioElapsed;
-      if (Math.abs(drift) > this.options.maxAcceptableDriftMs * 0.5) {
-        this.wallBaseTime += drift * 0.5;
-        this.resyncCount++;
-      }
-    }
   }
 
   private checkAndCorrectDrift() {
@@ -246,7 +259,8 @@ export class AudioSyncEngine {
     this.currentAudioDrift = drift;
 
     if (Math.abs(drift) > this.options.maxAcceptableDriftMs) {
-      this.smoothingResyncOffsetMs = -drift * this.options.resyncSmoothFactor;
+      this.wallBaseTime += drift * 0.5;
+      this.smoothingResyncOffsetMs = 0;
       this.resyncCount++;
     } else if (Math.abs(drift) < 5) {
       this.smoothingResyncOffsetMs = 0;
@@ -271,12 +285,8 @@ export class AudioSyncEngine {
     if (audioElapsed !== null) {
       const now = this.nowWall();
       const expectedWallBase = now - this.accumulatedPauseTime - audioElapsed;
-      const drift = this.wallBaseTime - expectedWallBase;
-
-      if (Math.abs(drift) > this.options.maxAcceptableDriftMs) {
-        this.wallBaseTime = expectedWallBase;
-        this.smoothingResyncOffsetMs = 0;
-      }
+      this.wallBaseTime = expectedWallBase;
+      this.smoothingResyncOffsetMs = 0;
     }
   }
 
@@ -301,6 +311,7 @@ export class AudioSyncEngine {
     }
 
     this.attachVisibilityHandler();
+    this.emitStateChange();
   }
 
   pause() {
@@ -310,6 +321,7 @@ export class AudioSyncEngine {
     this.pauseWallSnapshot = now;
     this.pausedElapsedSnapshot = now - this.wallBaseTime - this.accumulatedPauseTime;
     this.lastKnownAudioElapsed = this.getAudioReferencedElapsedMs() ?? this.pausedElapsedSnapshot;
+    this.emitStateChange();
   }
 
   resume() {
@@ -334,6 +346,7 @@ export class AudioSyncEngine {
     this.smoothingResyncOffsetMs = 0;
 
     this.checkAndCorrectDrift();
+    this.emitStateChange();
   }
 
   restart() {
@@ -349,6 +362,7 @@ export class AudioSyncEngine {
     this.state = "finished";
     this.pausedElapsedSnapshot = finalElapsed;
     this.detachVisibilityHandler();
+    this.emitStateChange();
   }
 
   private resetInternalState() {
@@ -411,15 +425,17 @@ export class AudioSyncEngine {
         : 0;
 
     const audioElapsed = this.getAudioReferencedElapsedMs();
-    const wallElapsed = this.getElapsedMs();
+    const totalElapsed = this.getElapsedMs();
 
     let clockSource: "wall" | "audio" | "mixed" = "wall";
     if (audioElapsed !== null) {
+      const wall = this.nowWall();
+      const wallElapsed = wall - this.wallBaseTime - this.accumulatedPauseTime;
       const diff = Math.abs(wallElapsed - audioElapsed);
       if (diff < 10) {
-        clockSource = "mixed";
+        clockSource = "audio";
       } else if (diff < this.options.maxAcceptableDriftMs) {
-        clockSource = "mixed";
+        clockSource = "audio";
       } else {
         clockSource = "audio";
       }
@@ -432,7 +448,7 @@ export class AudioSyncEngine {
       lowFrameEvents: this.lowFrameEvents,
       currentAudioOffsetMs: this.smoothingResyncOffsetMs,
       avgFrameTimeMs: avgFrame,
-      totalElapsedMs: wallElapsed,
+      totalElapsedMs: totalElapsed,
       audioElapsedMs: audioElapsed ?? this.lastKnownAudioElapsed,
       clockSource,
     };
@@ -441,6 +457,7 @@ export class AudioSyncEngine {
   destroy() {
     this.detachVisibilityHandler();
     this.listeners.clear();
+    this.stateChangeListeners.clear();
     this.state = "idle";
     this.audioCtx = null;
   }

@@ -222,6 +222,15 @@ export default function GamePlay({ song, onBack, onOpenScorebook }: GamePlayProp
       onSyncDiagnostics: (diag: SyncDiagnostics) => {
         setSyncDiagnostics(diag);
       },
+      onStateChange: (state) => {
+        if (state === "paused") {
+          setPaused(true);
+        } else if (state === "playing") {
+          setPaused(false);
+        } else if (state === "finished") {
+          setPaused(false);
+        }
+      },
     });
     playerRef.current = player;
 
