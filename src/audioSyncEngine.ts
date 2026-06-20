@@ -10,6 +10,8 @@ export interface SyncDiagnostics {
   totalElapsedMs: number;
   audioElapsedMs: number;
   clockSource: "wall" | "audio" | "mixed";
+  calibrationSource: "global" | "song";
+  calibrationValueMs: number;
 }
 
 export interface AudioSyncEngineOptions {
@@ -41,6 +43,7 @@ export class AudioSyncEngine {
   private options: Required<AudioSyncEngineOptions>;
 
   private touchCalibrationOffsetMs: number;
+  private calibrationSource: "global" | "song" = "global";
   private deviceBaselineOffsetMs = 0;
   private smoothingResyncOffsetMs = 0;
 
@@ -130,6 +133,14 @@ export class AudioSyncEngine {
 
   getTouchCalibrationOffset(): number {
     return this.touchCalibrationOffsetMs;
+  }
+
+  setCalibrationSource(source: "global" | "song") {
+    this.calibrationSource = source;
+  }
+
+  getCalibrationSource(): "global" | "song" {
+    return this.calibrationSource;
   }
 
   getTotalCalibrationOffset(): number {
@@ -459,6 +470,8 @@ export class AudioSyncEngine {
       totalElapsedMs: totalElapsed,
       audioElapsedMs: audioElapsed ?? this.lastKnownAudioElapsed,
       clockSource,
+      calibrationSource: this.calibrationSource,
+      calibrationValueMs: this.touchCalibrationOffsetMs,
     };
   }
 

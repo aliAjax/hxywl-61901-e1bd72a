@@ -1,6 +1,6 @@
-import type { Chart, ChartNote, GameStats, JudgeType, NoteType, Song } from "./types";
+import type { Chart, ChartNote, GameStats, JudgeType, NoteType, Song, EffectiveCalibration } from "./types";
 import { getChartForSong } from "./charts";
-import { getCalibrationOffset } from "./songs";
+import { getEffectiveCalibration } from "./songs";
 import { AudioSyncEngine, type SyncDiagnostics } from "./audioSyncEngine";
 
 export const PERFECT_WINDOW_MS = 50;
@@ -112,6 +112,8 @@ export class ChartPlayer {
 
   private syncStateUnsub: (() => void) | null = null;
 
+  private currentCalibration: EffectiveCalibration;
+
   constructor(song: Song, callbacks: ChartPlayerCallbacks, options?: ChartPlayerOptions) {
     this.song = song;
     this.chart = getChartForSong(song.id);
@@ -119,10 +121,11 @@ export class ChartPlayer {
     this.practiceStartMs = options?.practiceStartMs ?? 0;
     this.practiceEndMs = options?.practiceEndMs ?? song.duration * 1000;
 
-    const calibrationOffset = getCalibrationOffset();
+    this.currentCalibration = getEffectiveCalibration(song.id);
     this.syncEngine = new AudioSyncEngine({
-      touchCalibrationOffsetMs: calibrationOffset,
+      touchCalibrationOffsetMs: this.currentCalibration.value,
     });
+    this.syncEngine.setCalibrationSource(this.currentCalibration.source);
 
     this.syncStateUnsub = this.syncEngine.onStateChange((state) => {
       if (state === "paused") {
@@ -151,6 +154,16 @@ export class ChartPlayer {
 
   setCalibrationOffset(offsetMs: number) {
     this.syncEngine.setTouchCalibrationOffset(offsetMs);
+  }
+
+  getEffectiveCalibration(): EffectiveCalibration {
+    return { ...this.currentCalibration };
+  }
+
+  refreshCalibration() {
+    this.currentCalibration = getEffectiveCalibration(this.song.id);
+    this.syncEngine.setTouchCalibrationOffset(this.currentCalibration.value);
+    this.syncEngine.setCalibrationSource(this.currentCalibration.source);
   }
 
   private getCalibratedElapsed(): number {

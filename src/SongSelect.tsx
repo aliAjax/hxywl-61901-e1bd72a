@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Song } from "./types";
+import type { Song, EffectiveCalibration } from "./types";
 import {
   songs,
   difficultyLabels,
@@ -8,6 +8,11 @@ import {
   getSongBestScore,
   isSongFavorite,
   toggleSongFavorite,
+  getCalibrationOffset,
+  getSongCalibrationOffset,
+  saveSongCalibrationOffset,
+  resetSongCalibrationOffset,
+  getEffectiveCalibration,
 } from "./songs";
 import ChartPreview from "./ChartPreview";
 
@@ -33,8 +38,16 @@ export default function SongSelect({
   const [previewingSongId, setPreviewingSongId] = useState<string | null>(null);
   const [previewStep, setPreviewStep] = useState(-1);
   const [favoriteTick, setFavoriteTick] = useState(0);
+  const [showSongCalibration, setShowSongCalibration] = useState(false);
+  const [tempSongOffset, setTempSongOffset] = useState(0);
+  const [calibrationTick, setCalibrationTick] = useState(0);
   const previewTimerRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const formatOffset = (ms: number): string => {
+    if (ms === 0) return "0 ms";
+    return ms > 0 ? `+${ms} ms` : `${ms} ms`;
+  };
 
   const sortedSongs = [...songs].sort((a, b) => {
     const aFav = isSongFavorite(a.id);
@@ -303,6 +316,143 @@ export default function SongSelect({
               onStartPractice={onStartPractice ? (startMs, endMs) => onStartPractice(selectedSong.id, startMs, endMs) : undefined}
             />
 
+            <div className="song-detail-calibration">
+              {(() => {
+                const songOffset = getSongCalibrationOffset(selectedSong.id);
+                const effective = getEffectiveCalibration(selectedSong.id);
+                const globalOffset = getCalibrationOffset();
+
+                return (
+                  <>
+                    <div className="calibration-summary">
+                      <div className="calibration-summary-item">
+                        <small>全局校准</small>
+                        <strong>{formatOffset(globalOffset)}</strong>
+                      </div>
+                      <div className="calibration-summary-divider">→</div>
+                      <div className="calibration-summary-item highlight">
+                        <small>
+                          实际使用
+                          {effective.source === "song" ? (
+                            <span className="source-badge song-badge">🎵</span>
+                          ) : (
+                            <span className="source-badge global-badge">🌐</span>
+                          )}
+                        </small>
+                        <strong>{formatOffset(effective.value)}</strong>
+                      </div>
+                    </div>
+
+                    {songOffset !== null ? (
+                      <div className="song-calibration-set">
+                        <div className="song-calibration-info">
+                          <span>已设置单曲校准：{formatOffset(songOffset)}</span>
+                        </div>
+                        <div className="song-calibration-buttons">
+                          <button
+                            className="ghost-btn"
+                            onClick={() => {
+                              setTempSongOffset(songOffset);
+                              setShowSongCalibration(true);
+                            }}
+                          >
+                            ✏️ 修改
+                          </button>
+                          <button
+                            className="ghost-btn danger-btn"
+                            onClick={() => {
+                              if (window.confirm("确定清除这首歌的单独校准吗？")) {
+                                resetSongCalibrationOffset(selectedSong.id);
+                                setCalibrationTick((t) => t + 1);
+                              }
+                            }}
+                          >
+                            🗑️ 清除
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        className="ghost-btn calibration-set-btn"
+                        onClick={() => {
+                          setTempSongOffset(globalOffset);
+                          setShowSongCalibration(true);
+                        }}
+                      >
+                        🎯 为本歌单独设置校准
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            {showSongCalibration && (
+              <div className="song-calibration-panel">
+                <div className="song-calibration-header">
+                  <strong>设置「{selectedSong.title}」的校准值</strong>
+                  <button
+                    className="ghost-btn small-btn"
+                    onClick={() => setShowSongCalibration(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="song-calibration-controls">
+                  <button
+                    className="calibration-adjust-btn"
+                    onClick={() => setTempSongOffset((v) => v - 5)}
+                  >
+                    −
+                  </button>
+                  <div className="calibration-value-display large">
+                    <strong>
+                      {tempSongOffset === 0
+                        ? "0 ms"
+                        : tempSongOffset > 0
+                        ? `+${tempSongOffset} ms`
+                        : `${tempSongOffset} ms`}
+                    </strong>
+                    <small>
+                      {tempSongOffset === 0
+                        ? "无偏移"
+                        : tempSongOffset > 0
+                        ? "判定提前"
+                        : "判定延后"}
+                    </small>
+                  </div>
+                  <button
+                    className="calibration-adjust-btn"
+                    onClick={() => setTempSongOffset((v) => v + 5)}
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="song-calibration-actions-row">
+                  <button
+                    className="ghost-btn"
+                    onClick={() => setTempSongOffset(getCalibrationOffset())}
+                  >
+                    ↺ 使用全局值 ({formatOffset(getCalibrationOffset())})
+                  </button>
+                  <button
+                    className="start-btn"
+                    onClick={() => {
+                      saveSongCalibrationOffset(selectedSong.id, tempSongOffset);
+                      setShowSongCalibration(false);
+                      setCalibrationTick((t) => t + 1);
+                    }}
+                  >
+                    💾 保存
+                  </button>
+                </div>
+                <p className="song-calibration-hint">
+                  正值：系统判定时间提前，适合点击偏晚的玩家<br />
+                  负值：系统判定时间延后，适合点击偏早的玩家
+                </p>
+              </div>
+            )}
+
             <button
               className="start-btn"
               onClick={() => onStartPlay(selectedSong)}
@@ -330,6 +480,8 @@ export default function SongSelect({
             >
               📋 查看成绩册
             </button>
+
+            <div style={{ display: "none" }}>{calibrationTick}</div>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Song, PracticeSegment } from "./types";
+import type { Song, PracticeSegment, EffectiveCalibration } from "./types";
 import type { ActiveNote, GameStats, JudgeType, NoteType } from "./types";
 import {
   difficultyLabels,
@@ -9,6 +9,10 @@ import {
   saveSongBestScore,
   savePlayRecord,
   getCalibrationOffset,
+  getEffectiveCalibration,
+  saveSongCalibrationOffset,
+  resetSongCalibrationOffset,
+  getSongCalibrationOffset,
 } from "./songs";
 import {
   ChartPlayer, type SpawnedNote, HIT_ZONE_RELATIVE, type NoteVisualUpdate
@@ -71,7 +75,12 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
   const [trackHeightPx, setTrackHeightPx] = useState(0);
   const [syncDiagnostics, setSyncDiagnostics] = useState<SyncDiagnostics | null>(null);
   const [showSyncDebug, setShowSyncDebug] = useState(false);
-  const [calibrationOffset, setCalibrationOffset] = useState(getCalibrationOffset());
+  const [effectiveCalibration, setEffectiveCalibration] = useState<EffectiveCalibration>(
+    getEffectiveCalibration()
+  );
+  const [songCalibration, setSongCalibration] = useState<number | null>(null);
+  const [showSongCalibration, setShowSongCalibration] = useState(false);
+  const [tempSongOffset, setTempSongOffset] = useState(0);
 
   const isPractice = !!practiceSegment;
   const bestScore = useMemo(() => getSongBestScore(song.id), [song.id]);
@@ -247,8 +256,13 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
   }, [song.id, practiceSegment?.startMs, practiceSegment?.endMs]);
 
   useEffect(() => {
+    const songOffset = getSongCalibrationOffset(song.id);
+    setSongCalibration(songOffset);
+    setTempSongOffset(songOffset ?? getCalibrationOffset());
+
     const refresh = () => {
-      setCalibrationOffset(getCalibrationOffset());
+      setEffectiveCalibration(getEffectiveCalibration(song.id));
+      setSongCalibration(getSongCalibrationOffset(song.id));
     };
     refresh();
     const timer = window.setInterval(refresh, 1000);
@@ -260,7 +274,7 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, [song.id]);
 
   useEffect(() => {
     if (finished && !savedRecord && finalStatsRef.current) {
@@ -545,8 +559,12 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
               "linear-gradient(90deg, " + song.coverColor + ", " + song.accentColor + ")",
           }}
         />
-        <span className="progress-time progress-calibration">
-          🎯 {formatOffset(calibrationOffset)}
+        <span
+          className={`progress-time progress-calibration ${effectiveCalibration.source === "song" ? "calibration-song" : ""}`}
+          title={effectiveCalibration.source === "song" ? "使用单曲校准" : "使用全局校准"}
+        >
+          🎯 {formatOffset(effectiveCalibration.value)}
+          {effectiveCalibration.source === "song" ? " ♪" : ""}
         </span>
         <span className="progress-time">
           {formatDuration(Math.floor(Math.max(0, elapsed - effectiveStartMs) / 1000))} /{" "}
@@ -787,7 +805,16 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
             </div>
             <div className="sync-debug-item">
               <small>校准偏移</small>
-              <strong>{getCalibrationOffset()} ms</strong>
+              <strong>
+                {syncDiagnostics?.calibrationValueMs ?? 0} ms
+                {syncDiagnostics?.calibrationSource === "song" ? " ♪" : ""}
+              </strong>
+            </div>
+            <div className="sync-debug-item">
+              <small>校准来源</small>
+              <strong className={syncDiagnostics?.calibrationSource === "song" ? "drift-warning" : ""}>
+                {syncDiagnostics?.calibrationSource === "song" ? "🎵 单曲校准" : "🌐 全局校准"}
+              </strong>
             </div>
           </div>
           <div className="sync-debug-hint">按 F12 关闭此面板</div>
@@ -888,14 +915,115 @@ export default function GamePlay({ song, onBack, onOpenScorebook, practiceSegmen
               </div>
             )}
             <div className="result-calibration">
-              <span className="result-calibration-label">延迟校准</span>
+              <span className="result-calibration-label">
+                延迟校准
+                {effectiveCalibration.source === "song" ? (
+                  <span className="result-calibration-source-badge song-badge">🎵 单曲</span>
+                ) : (
+                  <span className="result-calibration-source-badge global-badge">🌐 全局</span>
+                )}
+              </span>
               <strong className="result-calibration-value">
-                {(() => {
-                  const off = getCalibrationOffset();
-                  return off === 0 ? "0 ms" : off > 0 ? `+${off} ms` : `${off} ms`;
-                })()}
+                {formatOffset(effectiveCalibration.value)}
               </strong>
             </div>
+
+            {!isPractice && (
+              <div className="result-song-calibration">
+                {songCalibration !== null ? (
+                  <div className="song-calibration-info">
+                    <span>当前歌曲已设置独立校准值</span>
+                    <button
+                      className="ghost-btn small-btn"
+                      onClick={() => {
+                        resetSongCalibrationOffset(song.id);
+                        setSongCalibration(null);
+                        setEffectiveCalibration(getEffectiveCalibration(song.id));
+                        playerRef.current?.refreshCalibration();
+                      }}
+                    >
+                      🔄 清除单曲校准
+                    </button>
+                  </div>
+                ) : (
+                  <div className="song-calibration-actions">
+                    <button
+                      className="ghost-btn small-btn"
+                      onClick={() => {
+                        setTempSongOffset(effectiveCalibration.value);
+                        setShowSongCalibration(true);
+                      }}
+                    >
+                      🎯 为本歌单独设置校准
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showSongCalibration && (
+              <div className="song-calibration-panel">
+                <div className="song-calibration-header">
+                  <strong>设置单曲校准值</strong>
+                  <button
+                    className="ghost-btn small-btn"
+                    onClick={() => setShowSongCalibration(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="song-calibration-controls">
+                  <button
+                    className="calibration-adjust-btn"
+                    onClick={() => setTempSongOffset((v) => v - 5)}
+                  >
+                    −
+                  </button>
+                  <div className="calibration-value-display large">
+                    <strong>{formatOffset(tempSongOffset)}</strong>
+                    <small>
+                      {tempSongOffset === 0
+                        ? "无偏移"
+                        : tempSongOffset > 0
+                        ? "判定提前"
+                        : "判定延后"}
+                    </small>
+                  </div>
+                  <button
+                    className="calibration-adjust-btn"
+                    onClick={() => setTempSongOffset((v) => v + 5)}
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="song-calibration-actions-row">
+                  <button
+                    className="ghost-btn"
+                    onClick={() => {
+                      setTempSongOffset(getCalibrationOffset());
+                    }}
+                  >
+                    ↺ 使用全局值 ({formatOffset(getCalibrationOffset())})
+                  </button>
+                  <button
+                    className="start-btn"
+                    onClick={() => {
+                      saveSongCalibrationOffset(song.id, tempSongOffset);
+                      setSongCalibration(tempSongOffset);
+                      setEffectiveCalibration(getEffectiveCalibration(song.id));
+                      playerRef.current?.refreshCalibration();
+                      setShowSongCalibration(false);
+                    }}
+                  >
+                    💾 保存为本歌校准
+                  </button>
+                </div>
+                <p className="song-calibration-hint">
+                  正值：系统判定时间提前，适合点击偏晚的玩家<br />
+                  负值：系统判定时间延后，适合点击偏早的玩家
+                </p>
+              </div>
+            )}
             <div className="result-stats">
               <div className="result-summary-section">
                 <div className="result-section-title">总览</div>

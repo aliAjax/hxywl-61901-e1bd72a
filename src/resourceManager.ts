@@ -7,6 +7,8 @@ import type {
   ResourceVersion,
   ResourceIntegrityReport,
   ResourceInitResult,
+  CalibrationData,
+  EffectiveCalibration,
 } from "./types";
 
 const CURRENT_SCHEMA_VERSION = 1;
@@ -21,6 +23,7 @@ const STORAGE_KEYS = {
   BEST_SCORES: "rhythm-best-scores",
   PLAY_RECORDS: "rhythm-play-records",
   CALIBRATION: "rhythm-calibration-offset",
+  CALIBRATION_V2: "rhythm-calibration-data",
   TUTORIAL: "rhythm-tutorial-completed",
   FAVORITES: "rhythm-favorite-songs",
 } as const;
@@ -649,6 +652,53 @@ class ResourceManager {
     }
   }
 
+  private migrateCalibrationToV2(): void {
+    const v1Raw = localStorage.getItem(STORAGE_KEYS.CALIBRATION);
+    const v2Raw = localStorage.getItem(STORAGE_KEYS.CALIBRATION_V2);
+
+    if (v2Raw !== null) {
+      try {
+        const parsed = JSON.parse(v2Raw);
+        if (parsed && typeof parsed.global === "number" && parsed.perSong) {
+          return;
+        }
+      } catch {
+        // invalid v2 data, will rebuild
+      }
+    }
+
+    let globalOffset = 0;
+    if (v1Raw !== null) {
+      globalOffset = Number(v1Raw) || 0;
+    }
+
+    const v2Data: CalibrationData = {
+      global: globalOffset,
+      perSong: {},
+    };
+
+    localStorage.setItem(STORAGE_KEYS.CALIBRATION_V2, JSON.stringify(v2Data));
+  }
+
+  private readCalibrationData(): CalibrationData {
+    this.migrateCalibrationToV2();
+    const raw = localStorage.getItem(STORAGE_KEYS.CALIBRATION_V2);
+    try {
+      const parsed = JSON.parse(raw || "{}");
+      if (parsed && typeof parsed.global === "number" && parsed.perSong) {
+        return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return { global: 0, perSong: {} };
+  }
+
+  private writeCalibrationData(data: CalibrationData): void {
+    localStorage.setItem(STORAGE_KEYS.CALIBRATION_V2, JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEYS.CALIBRATION, String(Math.round(data.global)));
+  }
+
   private migrateLegacyTutorial(): void {
     const legacyKey = "rhythm-tutorial-completed";
     const newKey = STORAGE_KEYS.TUTORIAL;
@@ -712,6 +762,7 @@ class ResourceManager {
     localStorage.removeItem(STORAGE_KEYS.PLAY_RECORDS);
     localStorage.removeItem(STORAGE_KEYS.VERSION);
     localStorage.removeItem(STORAGE_KEYS.CALIBRATION);
+    localStorage.removeItem(STORAGE_KEYS.CALIBRATION_V2);
     localStorage.removeItem(STORAGE_KEYS.TUTORIAL);
     localStorage.removeItem(STORAGE_KEYS.FAVORITES);
 
@@ -741,6 +792,7 @@ class ResourceManager {
 
   resetSettings(): void {
     localStorage.removeItem(STORAGE_KEYS.CALIBRATION);
+    localStorage.removeItem(STORAGE_KEYS.CALIBRATION_V2);
     localStorage.removeItem(STORAGE_KEYS.TUTORIAL);
   }
 
@@ -991,15 +1043,61 @@ class ResourceManager {
   }
 
   getCalibrationOffset(): number {
-    return Number(localStorage.getItem(STORAGE_KEYS.CALIBRATION) || 0);
+    return this.readCalibrationData().global;
   }
 
   saveCalibrationOffset(offsetMs: number): void {
-    localStorage.setItem(STORAGE_KEYS.CALIBRATION, String(Math.round(offsetMs)));
+    const data = this.readCalibrationData();
+    data.global = Math.round(offsetMs);
+    this.writeCalibrationData(data);
   }
 
   resetCalibrationOffset(): void {
-    localStorage.removeItem(STORAGE_KEYS.CALIBRATION);
+    const data = this.readCalibrationData();
+    data.global = 0;
+    this.writeCalibrationData(data);
+  }
+
+  getSongCalibrationOffset(songId: string): number | null {
+    const data = this.readCalibrationData();
+    const val = data.perSong[songId];
+    return typeof val === "number" ? val : null;
+  }
+
+  saveSongCalibrationOffset(songId: string, offsetMs: number): void {
+    const data = this.readCalibrationData();
+    data.perSong[songId] = Math.round(offsetMs);
+    this.writeCalibrationData(data);
+  }
+
+  resetSongCalibrationOffset(songId: string): void {
+    const data = this.readCalibrationData();
+    delete data.perSong[songId];
+    this.writeCalibrationData(data);
+  }
+
+  getEffectiveCalibration(songId?: string | null): EffectiveCalibration {
+    const data = this.readCalibrationData();
+    if (songId && typeof data.perSong[songId] === "number") {
+      return {
+        value: data.perSong[songId],
+        source: "song",
+      };
+    }
+    return {
+      value: data.global,
+      source: "global",
+    };
+  }
+
+  getAllSongCalibrations(): Record<string, number> {
+    return { ...this.readCalibrationData().perSong };
+  }
+
+  resetAllSongCalibrations(): void {
+    const data = this.readCalibrationData();
+    data.perSong = {};
+    this.writeCalibrationData(data);
   }
 
   isTutorialCompleted(): boolean {

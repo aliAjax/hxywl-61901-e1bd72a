@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { getCalibrationOffset, saveCalibrationOffset, resetCalibrationOffset, resetTutorialStatus, isTutorialCompleted } from "./songs";
+import {
+  getCalibrationOffset,
+  saveCalibrationOffset,
+  resetCalibrationOffset,
+  resetTutorialStatus,
+  isTutorialCompleted,
+  getAllSongCalibrations,
+  resetAllSongCalibrations,
+  getEffectiveCalibration,
+} from "./songs";
 import { resourceManager } from "./resourceManager";
 
 interface SettingsProps {
@@ -28,6 +37,8 @@ export default function Settings({
   const [message, setMessage] = useState<string | null>(null);
 
   const calibrationOffset = getCalibrationOffset();
+  const effectiveCalibration = getEffectiveCalibration();
+  const songCalibrationCount = Object.keys(getAllSongCalibrations()).length;
   const tutorialDone = isTutorialCompleted();
   const version = resourceManager.getVersion();
 
@@ -118,14 +129,39 @@ export default function Settings({
       },
     },
     {
+      id: "reset-song-calibrations",
+      icon: "🎵",
+      title: "清除所有单曲校准",
+      desc: (() => {
+        const count = Object.keys(getAllSongCalibrations()).length;
+        return count > 0
+          ? `当前有 ${count} 首歌曲设置了独立校准值，清除后将全部使用全局校准`
+          : "当前没有歌曲设置独立校准值";
+      })(),
+      actionLabel: "清除单曲校准",
+      danger: Object.keys(getAllSongCalibrations()).length > 0,
+      onClick: () => {
+        const count = Object.keys(getAllSongCalibrations()).length;
+        if (count === 0) {
+          showMessage("没有需要清除的单曲校准");
+          return;
+        }
+        if (window.confirm(`确定要清除 ${count} 首歌曲的独立校准值吗？`)) {
+          resetAllSongCalibrations();
+          setTick((t) => t + 1);
+          showMessage("已清除所有单曲校准");
+        }
+      },
+    },
+    {
       id: "reset-settings",
       icon: "⚙️",
       title: "重置游戏设置",
-      desc: "重置校准值和教学状态，保留歌曲和分数",
+      desc: "重置全局校准、所有单曲校准和教学状态，保留歌曲和分数",
       actionLabel: "重置设置",
       danger: true,
       onClick: () => {
-        if (window.confirm("确定要重置游戏设置吗？")) {
+        if (window.confirm("确定要重置游戏设置吗？这将清除所有校准和教学进度。")) {
           resourceManager.resetSettings();
           setTick((t) => t + 1);
           showMessage("设置已重置");
@@ -181,9 +217,17 @@ export default function Settings({
             <div className="settings-item-desc">手动微调校准值，以5ms为步长。正值表示系统判定提前，负值表示判定延后。自动校准仍然可以覆盖此值。</div>
             <div className="calibration-controls">
               <div className="calibration-value-display">
-                <span className="calibration-value-label">当前值</span>
+                <span className="calibration-value-label">全局校准</span>
                 <strong className="calibration-value">{formatOffset(calibrationOffset)}</strong>
               </div>
+              {songCalibrationCount > 0 && (
+                <div className="calibration-song-count">
+                  <span className="calibration-value-label">单曲校准</span>
+                  <strong className="calibration-value small">
+                    {songCalibrationCount} 首歌已设置
+                  </strong>
+                </div>
+              )}
               <div className="calibration-buttons">
                 <button
                   className="calibration-adjust-btn"

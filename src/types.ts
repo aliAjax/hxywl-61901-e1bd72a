@@ -115,3 +115,15 @@ export interface ResourceInitResult {
   warnings: string[];
   version: ResourceVersion;
 }
+
+export interface CalibrationData {
+  global: number;
+  perSong: Record<string, number>;
+}
+
+export type CalibrationSource = "global" | "song";
+
+export interface EffectiveCalibration {
+  value: number;
+  source: CalibrationSource;
+}

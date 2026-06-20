@@ -73,6 +73,30 @@ export function resetCalibrationOffset(): void {
   resourceManager.resetCalibrationOffset();
 }
 
+export function getSongCalibrationOffset(songId: string): number | null {
+  return resourceManager.getSongCalibrationOffset(songId);
+}
+
+export function saveSongCalibrationOffset(songId: string, offsetMs: number): void {
+  resourceManager.saveSongCalibrationOffset(songId, offsetMs);
+}
+
+export function resetSongCalibrationOffset(songId: string): void {
+  resourceManager.resetSongCalibrationOffset(songId);
+}
+
+export function getEffectiveCalibration(songId?: string | null): import("./types").EffectiveCalibration {
+  return resourceManager.getEffectiveCalibration(songId);
+}
+
+export function getAllSongCalibrations(): Record<string, number> {
+  return resourceManager.getAllSongCalibrations();
+}
+
+export function resetAllSongCalibrations(): void {
+  resourceManager.resetAllSongCalibrations();
+}
+
 export const TUTORIAL_KEY = "rhythm-tutorial-completed";
 
 export function isTutorialCompleted(): boolean {

@@ -2652,6 +2652,213 @@ button {
   font-weight: 700;
 }
 
+.result-calibration-source-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.result-calibration-source-badge.song-badge {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+}
+
+.result-calibration-source-badge.global-badge {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.result-song-calibration {
+  margin-bottom: 14px;
+}
+
+.song-calibration-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  border-radius: 10px;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.song-calibration-actions {
+  text-align: center;
+}
+
+.song-calibration-panel {
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.song-calibration-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #f8fafc;
+}
+
+.song-calibration-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.calibration-value-display.large {
+  text-align: center;
+  min-width: 140px;
+}
+
+.calibration-value-display.large strong {
+  font-size: 28px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.calibration-value-display.large small {
+  display: block;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.song-calibration-actions-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.song-calibration-hint {
+  font-size: 12px;
+  color: #64748b;
+  text-align: center;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.small-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.progress-calibration.calibration-song {
+  color: #fb923c;
+}
+
+.calibration-song-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(249, 115, 22, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(249, 115, 22, 0.2);
+}
+
+.calibration-song-count .calibration-value.small {
+  font-size: 13px;
+  color: #fb923c;
+}
+
+.song-detail-calibration {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.calibration-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.calibration-summary-item {
+  text-align: center;
+  flex: 1;
+  padding: 8px;
+  background: rgba(79, 70, 229, 0.1);
+  border-radius: 8px;
+}
+
+.calibration-summary-item small {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.calibration-summary-item strong {
+  display: block;
+  font-size: 16px;
+  color: #f8fafc;
+}
+
+.calibration-summary-item.highlight {
+  background: rgba(249, 115, 22, 0.15);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.calibration-summary-item.highlight strong {
+  color: #fb923c;
+}
+
+.calibration-summary-divider {
+  color: #64748b;
+  font-size: 18px;
+}
+
+.source-badge {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 12px;
+}
+
+.song-calibration-set {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(249, 115, 22, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(249, 115, 22, 0.25);
+}
+
+.song-calibration-set .song-calibration-info {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.song-calibration-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.calibration-set-btn {
+  width: 100%;
+  justify-content: center;
+}
+
 @media (max-width: 820px) {
   .calibration-card {
     padding: 24px 18px;
