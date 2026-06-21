@@ -57,6 +57,10 @@ export default function ChartEditor({
   const [showValidation, setShowValidation] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const tracksRef = useRef<HTMLDivElement>(null);
+  const densityRef = useRef<HTMLDivElement>(null);
+
+  const TRACK_LABEL_WIDTH = 36;
 
   const totalDurationMs = song ? song.duration * 1000 : 0;
   const viewportDurationMs = Math.min(viewportSeconds * 1000, totalDurationMs);
@@ -200,6 +204,49 @@ export default function ChartEditor({
     return Math.round(time / NOTE_SNAP_MS) * NOTE_SNAP_MS;
   }
 
+  function getTracksAreaRect() {
+    const canvasRect = containerRef.current?.getBoundingClientRect();
+    const tracksRect = tracksRef.current?.getBoundingClientRect();
+    if (!canvasRect || !tracksRect) return null;
+    return {
+      top: tracksRect.top - canvasRect.top,
+      left: tracksRect.left - canvasRect.left,
+      width: tracksRect.width,
+      height: tracksRect.height,
+    };
+  }
+
+  function getDensityAreaRect() {
+    const canvasRect = containerRef.current?.getBoundingClientRect();
+    const densityRect = densityRef.current?.getBoundingClientRect();
+    if (!canvasRect || !densityRect) return null;
+    return {
+      top: densityRect.top - canvasRect.top,
+      left: densityRect.left - canvasRect.left,
+      width: densityRect.width,
+      height: densityRect.height,
+    };
+  }
+
+  function yToTrack(y: number): number | null {
+    const area = getTracksAreaRect();
+    if (!area) return null;
+    const localY = y - area.top;
+    if (localY < 0 || localY >= area.height) return null;
+    const track = Math.floor(localY / (area.height / TRACK_COUNT));
+    return Math.max(0, Math.min(TRACK_COUNT - 1, track));
+  }
+
+  function getNoteYRange(track: number): { top: number; bottom: number } | null {
+    const area = getTracksAreaRect();
+    if (!area) return null;
+    const trackH = area.height / TRACK_COUNT;
+    return {
+      top: area.top + track * trackH,
+      bottom: area.top + (track + 1) * trackH,
+    };
+  }
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (isDraggingNote || isResizingLong) return;
 
@@ -211,11 +258,8 @@ export default function ChartEditor({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const trackHeight = 40;
-    const densityHeight = 36;
-    const headerHeight = 36;
-
-    if (y < densityHeight + headerHeight) {
+    const densityArea = getDensityAreaRect();
+    if (densityArea && y < densityArea.top + densityArea.height) {
       if (maxLeft <= 0) return;
       setIsDragging(true);
       setDragStartX(e.clientX);
@@ -223,10 +267,9 @@ export default function ChartEditor({
       return;
     }
 
-    const trackAreaY = y - densityHeight - headerHeight;
-    if (trackAreaY < 0 || trackAreaY >= trackHeight * TRACK_COUNT) return;
+    const clickedTrack = yToTrack(y);
+    if (clickedTrack === null) return;
 
-    const clickedTrack = Math.floor(trackAreaY / trackHeight);
     const clickedTime = xToTime(x);
 
     if (currentTool === "add-tap") {
@@ -254,16 +297,15 @@ export default function ChartEditor({
       setSelectedNoteId(null);
     } else if (currentTool === "delete") {
       setNotes((prev) => prev.filter((n) => {
-        const noteEnd = n.type === "long" && n.duration ? n.time + n.duration : n.time;
         const noteX = getNoteX(n);
         const noteWidth = n.type === "long" && n.duration ? n.duration * pxPerMs : 8;
-        const noteTop = n.track * trackHeight + densityHeight + headerHeight;
-        const noteBottom = noteTop + trackHeight;
+        const yRange = getNoteYRange(n.track);
+        if (!yRange) return true;
         return !(
           x >= noteX - 4 &&
           x <= noteX + noteWidth + 4 &&
-          y >= noteTop &&
-          y <= noteBottom
+          y >= yRange.top &&
+          y <= yRange.bottom
         );
       }));
       setHasUnsavedChanges(true);
@@ -285,13 +327,9 @@ export default function ChartEditor({
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
-      const trackHeight = 40;
-      const densityHeight = 36;
-      const headerHeight = 36;
-      const trackAreaY = y - densityHeight - headerHeight;
-
       const newTime = snapTime(xToTime(x) - dragNoteOffset);
-      const newTrack = Math.max(0, Math.min(TRACK_COUNT - 1, Math.floor(trackAreaY / trackHeight)));
+      const newTrack = yToTrack(y);
+      if (newTrack === null) return;
 
       setNotes((prev) =>
         prev.map((n) =>
@@ -632,7 +670,7 @@ export default function ChartEditor({
               <div className="section-label">难度密度</div>
             </div>
 
-            <div className="density-section" style={{ height: densityHeight }}>
+            <div className="density-section" style={{ height: densityHeight }} ref={densityRef}>
               <div className="density-chart" style={{ height: densityHeight }}>
                 {peakSections.map((section, i) => {
                   const x = timeToX(section.start);
@@ -685,6 +723,7 @@ export default function ChartEditor({
             <div
               className="editor-tracks"
               style={{ height: trackHeight * TRACK_COUNT }}
+              ref={tracksRef}
             >
               {Array.from({ length: TRACK_COUNT }).map((_, trackIdx) => (
                 <div
