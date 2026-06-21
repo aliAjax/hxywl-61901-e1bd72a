@@ -118,6 +118,17 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     isPractice,
   });
 
+  const comparisonRef = useRef(comparison);
+  const recordingRef = useRef(recording);
+
+  useEffect(() => {
+    comparisonRef.current = comparison;
+  }, [comparison]);
+
+  useEffect(() => {
+    recordingRef.current = recording;
+  }, [recording]);
+
   const trackLabels = useMemo(
     () => [keyBindings.track0, keyBindings.track1, keyBindings.track2, keyBindings.track3],
     [keyBindings]
@@ -270,7 +281,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
             ((elapsedMs - effectiveStartMs) / effectiveDurationMs) * 100
           )
         );
-        comparison.handleProgressUpdate(progress, elapsedMs);
+        comparisonRef.current.handleProgressUpdate(progress, elapsedMs);
       },
       onFinish: (finalStats: GameStats) => {
         finalStatsRef.current = finalStats;
@@ -288,21 +299,21 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
       },
       onSyncDiagnostics: (diag: SyncDiagnostics) => {
         setSyncDiagnostics(diag);
-        recording.checkDiagnosticsDelta(diag);
+        recordingRef.current.checkDiagnosticsDelta(diag);
       },
       onStateChange: (state) => {
         if (state === "paused") {
           setPaused(true);
-          recording.recordPause(playerRef.current?.getElapsedMs() ?? 0);
+          recordingRef.current.recordPause(playerRef.current?.getElapsedMs() ?? 0);
         } else if (state === "playing") {
           setPaused(false);
-          recording.recordResume(playerRef.current?.getElapsedMs() ?? 0);
+          recordingRef.current.recordResume(playerRef.current?.getElapsedMs() ?? 0);
         } else if (state === "finished") {
           setPaused(false);
         }
       },
       onJudgeDetail: (detail: JudgeDetailEvent) => {
-        recording.recordJudge(detail);
+        recordingRef.current.recordJudge(detail);
       },
     }, {
       practiceStartMs: practiceSegment?.startMs,
@@ -315,7 +326,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
       player.destroy();
       playerRef.current = null;
     };
-  }, [song.id, difficulty, practiceSegment?.startMs, practiceSegment?.endMs, comparison, recording]);
+  }, [song.id, difficulty, practiceSegment?.startMs, practiceSegment?.endMs]);
 
   useEffect(() => {
     if (finished && !savedRecord && finalStatsRef.current) {
@@ -342,7 +353,8 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
           longMissCount: finalStats.longMissCount,
           completedAt: now,
         });
-        if (comparison.checkpoints.length > 0 || finalScore > 0) {
+        const checkpoints = comparisonRef.current.checkpoints;
+        if (checkpoints.length > 0 || finalScore > 0) {
           saveBestPlaySummary({
             songId: song.id,
             difficulty,
@@ -357,15 +369,15 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
             longPerfectCount: finalStats.longPerfectCount,
             longGoodCount: finalStats.longGoodCount,
             longMissCount: finalStats.longMissCount,
-            checkpoints: comparison.checkpoints,
+            checkpoints,
             completedAt: now,
           });
         }
-        recording.handleFinish(finalStats);
+        recordingRef.current.handleFinish(finalStats);
       }
       setSavedRecord(true);
     }
-  }, [finished, savedRecord, song.id, difficulty, isPractice, comparison.checkpoints, recording]);
+  }, [finished, savedRecord, song.id, difficulty, isPractice]);
 
   function handleStart() {
     setStarted(true);
