@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Song, PracticeSegment, EffectiveCalibration, ChartDifficulty } from "./types";
-import type { ActiveNote, GameStats, JudgeType, NoteType, BestPlaySummary, ScoreCheckpoint, LiveComparisonState } from "./types";
+import type { Song, PracticeSegment, ChartDifficulty } from "./types";
+import type { ActiveNote, GameStats, JudgeType, NoteType } from "./types";
 import {
   difficultyLabels,
   difficultyColors,
@@ -8,18 +8,11 @@ import {
   getSongBestScore,
   saveSongBestScore,
   savePlayRecord,
-  getCalibrationOffset,
-  getEffectiveCalibration,
-  saveSongCalibrationOffset,
-  resetSongCalibrationOffset,
-  getSongCalibrationOffset,
-  CHART_DIFFICULTY_INFO,
-  getBestPlaySummary,
   saveBestPlaySummary,
-  computeLiveComparison,
   getKeyBindings,
   getButtonLayout,
-  saveReplayData,
+  getCalibrationOffset,
+  CHART_DIFFICULTY_INFO,
 } from "./songs";
 import type { KeyBindings, ButtonLayout } from "./types";
 import {
@@ -27,7 +20,9 @@ import {
 } from "./chartPlayer";
 import type { SyncDiagnostics } from "./audioSyncEngine";
 import { getChartForSong } from "./charts";
-import { InputRecorder } from "./inputRecorder";
+import { useGameCalibration } from "./hooks/useGameCalibration";
+import { useBestPlayComparison, type ComparisonAnalysis } from "./hooks/useBestPlayComparison";
+import { usePlayRecording } from "./hooks/usePlayRecording";
 
 interface GamePlayProps {
   song: Song;
@@ -47,6 +42,15 @@ function getOrientation(): Orientation {
   const w = window.innerWidth;
   const h = window.innerHeight;
   return h >= w ? "portrait" : "landscape";
+}
+
+function createEmptyStats(): GameStats {
+  return {
+    score: 0, combo: 0, maxCombo: 0,
+    perfectCount: 0, goodCount: 0, missCount: 0,
+    tapPerfectCount: 0, tapGoodCount: 0, tapMissCount: 0,
+    longPerfectCount: 0, longGoodCount: 0, longMissCount: 0,
+  };
 }
 
 export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, practiceSegment }: GamePlayProps) {
@@ -85,36 +89,34 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
   const [trackHeightPx, setTrackHeightPx] = useState(0);
   const [syncDiagnostics, setSyncDiagnostics] = useState<SyncDiagnostics | null>(null);
   const [showSyncDebug, setShowSyncDebug] = useState(false);
-  const [effectiveCalibration, setEffectiveCalibration] = useState<EffectiveCalibration>(
-    getEffectiveCalibration()
-  );
-  const [songCalibration, setSongCalibration] = useState<number | null>(null);
-  const [showSongCalibration, setShowSongCalibration] = useState(false);
-  const [tempSongOffset, setTempSongOffset] = useState(0);
-
-  const [showBestComparison, setShowBestComparison] = useState(true);
-  const [bestPlaySummary, setBestPlaySummary] = useState<BestPlaySummary | null>(null);
   const [keyBindings, setKeyBindings] = useState<KeyBindings>(getKeyBindings());
   const [buttonLayout, setButtonLayout] = useState<ButtonLayout>(getButtonLayout());
-  const [checkpoints, setCheckpoints] = useState<ScoreCheckpoint[]>([]);
-  const [liveComparison, setLiveComparison] = useState<LiveComparisonState | null>(null);
-  const lastCheckpointPercentRef = useRef<number>(-1);
-  const currentStatsRef = useRef<GameStats>({
-    score: 0, combo: 0, maxCombo: 0,
-    perfectCount: 0, goodCount: 0, missCount: 0,
-    tapPerfectCount: 0, tapGoodCount: 0, tapMissCount: 0,
-    longPerfectCount: 0, longGoodCount: 0, longMissCount: 0,
-  });
-  const showBestComparisonRef = useRef(showBestComparison);
-  const bestPlaySummaryRef = useRef<BestPlaySummary | null>(bestPlaySummary);
-  const comparisonBaselineRef = useRef<BestPlaySummary | null>(null);
 
+  const currentStatsRef = useRef<GameStats>(createEmptyStats());
   const isPractice = !!practiceSegment;
   const bestScore = useMemo(() => getSongBestScore(song.id, difficulty), [song.id, difficulty]);
   const finalStatsRef = useRef<GameStats | null>(null);
   const activePointersRef = useRef<Map<number, number>>(new Map());
-  const recorderRef = useRef<InputRecorder | null>(null);
-  const recorderHadPauseRef = useRef(false);
+
+  const chart = useMemo(() => getChartForSong(song.id, difficulty), [song.id, difficulty]);
+
+  const calibration = useGameCalibration({
+    songId: song.id,
+    refreshPlayerCalibration: () => playerRef.current?.refreshCalibration(),
+  });
+
+  const comparison = useBestPlayComparison({
+    song,
+    difficulty,
+    isPractice,
+    currentStatsRef,
+  });
+
+  const recording = usePlayRecording({
+    songId: song.id,
+    difficulty,
+    isPractice,
+  });
 
   const trackLabels = useMemo(
     () => [keyBindings.track0, keyBindings.track1, keyBindings.track2, keyBindings.track3],
@@ -125,23 +127,6 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     () => trackLabels.some((k) => k.toLowerCase() === "space"),
     [trackLabels]
   );
-
-  const CHECKPOINT_INTERVAL_PERCENT = 5;
-
-  useEffect(() => {
-    showBestComparisonRef.current = showBestComparison;
-  }, [showBestComparison]);
-
-  useEffect(() => {
-    bestPlaySummaryRef.current = bestPlaySummary;
-  }, [bestPlaySummary]);
-
-  useEffect(() => {
-    const summary = getBestPlaySummary(song.id, difficulty);
-    setBestPlaySummary(summary);
-    bestPlaySummaryRef.current = summary;
-    comparisonBaselineRef.current = summary;
-  }, [song.id, difficulty]);
 
   useEffect(() => {
     const measure = () => {
@@ -171,6 +156,11 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
   }, []);
 
   useEffect(() => {
+    const effectiveStartMs = practiceSegment ? practiceSegment.startMs : 0;
+    const effectiveDurationMs = practiceSegment
+      ? practiceSegment.endMs - effectiveStartMs
+      : song.duration * 1000;
+
     const player = new ChartPlayer(song, {
       onNoteSpawn: (spawned: SpawnedNote) => {
         setActiveNotes((prev) => {
@@ -273,35 +263,14 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
       },
       onTimeUpdate: (elapsedMs: number) => {
         setElapsed(elapsedMs);
-        if (isPractice) return;
-        const effectiveStartMs = practiceSegment ? practiceSegment.startMs : 0;
-        const effectiveDurationMs = practiceSegment
-          ? practiceSegment.endMs - effectiveStartMs
-          : song.duration * 1000;
-        const progress = Math.max(0, Math.min(100, ((elapsedMs - effectiveStartMs) / effectiveDurationMs) * 100));
-        const bucketedProgress = Math.floor(progress / CHECKPOINT_INTERVAL_PERCENT) * CHECKPOINT_INTERVAL_PERCENT;
-        if (bucketedProgress > 0 && bucketedProgress > lastCheckpointPercentRef.current && bucketedProgress <= 100) {
-          lastCheckpointPercentRef.current = bucketedProgress;
-          const stats = currentStatsRef.current;
-          const checkpoint: ScoreCheckpoint = {
-            progressPercent: bucketedProgress,
-            elapsedMs,
-            score: Math.floor(stats.score),
-            combo: stats.combo,
-            perfectCount: stats.perfectCount,
-            goodCount: stats.goodCount,
-            missCount: stats.missCount,
-          };
-          setCheckpoints((prev) => [...prev, checkpoint]);
-        }
-        if (showBestComparisonRef.current && bestPlaySummaryRef.current && bestPlaySummaryRef.current.checkpoints.length > 0) {
-          const comparison = computeLiveComparison(
-            bestPlaySummaryRef.current,
-            currentStatsRef.current,
-            progress
-          );
-          setLiveComparison(comparison);
-        }
+        const progress = Math.max(
+          0,
+          Math.min(
+            100,
+            ((elapsedMs - effectiveStartMs) / effectiveDurationMs) * 100
+          )
+        );
+        comparison.handleProgressUpdate(progress, elapsedMs);
       },
       onFinish: (finalStats: GameStats) => {
         finalStatsRef.current = finalStats;
@@ -319,33 +288,21 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
       },
       onSyncDiagnostics: (diag: SyncDiagnostics) => {
         setSyncDiagnostics(diag);
-        recorderRef.current?.checkDiagnosticsDelta(diag);
+        recording.checkDiagnosticsDelta(diag);
       },
       onStateChange: (state) => {
         if (state === "paused") {
           setPaused(true);
-          recorderHadPauseRef.current = true;
-          recorderRef.current?.recordPause(playerRef.current?.getElapsedMs() ?? 0, Date.now());
+          recording.recordPause(playerRef.current?.getElapsedMs() ?? 0);
         } else if (state === "playing") {
           setPaused(false);
-          if (recorderHadPauseRef.current) {
-            recorderRef.current?.recordResume(playerRef.current?.getElapsedMs() ?? 0, Date.now());
-          }
+          recording.recordResume(playerRef.current?.getElapsedMs() ?? 0);
         } else if (state === "finished") {
           setPaused(false);
         }
       },
       onJudgeDetail: (detail: JudgeDetailEvent) => {
-        recorderRef.current?.recordJudge(
-          detail.noteId,
-          detail.track,
-          detail.noteType,
-          detail.phase,
-          detail.judge,
-          detail.distanceMs,
-          detail.elapsedMs,
-          detail.calibratedElapsedMs
-        );
+        recording.recordJudge(detail);
       },
     }, {
       practiceStartMs: practiceSegment?.startMs,
@@ -358,28 +315,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
       player.destroy();
       playerRef.current = null;
     };
-  }, [song.id, difficulty, practiceSegment?.startMs, practiceSegment?.endMs]);
-
-  useEffect(() => {
-    const songOffset = getSongCalibrationOffset(song.id);
-    setSongCalibration(songOffset);
-    setTempSongOffset(songOffset ?? getCalibrationOffset());
-
-    const refresh = () => {
-      setEffectiveCalibration(getEffectiveCalibration(song.id));
-      setSongCalibration(getSongCalibrationOffset(song.id));
-    };
-    refresh();
-    const timer = window.setInterval(refresh, 1000);
-    const onVisible = () => {
-      if (!document.hidden) refresh();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [song.id]);
+  }, [song.id, difficulty, practiceSegment?.startMs, practiceSegment?.endMs, comparison, recording]);
 
   useEffect(() => {
     if (finished && !savedRecord && finalStatsRef.current) {
@@ -406,7 +342,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
           longMissCount: finalStats.longMissCount,
           completedAt: now,
         });
-        if (checkpoints.length > 0 || finalScore > 0) {
+        if (comparison.checkpoints.length > 0 || finalScore > 0) {
           saveBestPlaySummary({
             songId: song.id,
             difficulty,
@@ -421,18 +357,15 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
             longPerfectCount: finalStats.longPerfectCount,
             longGoodCount: finalStats.longGoodCount,
             longMissCount: finalStats.longMissCount,
-            checkpoints,
+            checkpoints: comparison.checkpoints,
             completedAt: now,
           });
         }
-        if (recorderRef.current) {
-          const replayData = recorderRef.current.buildReplayData(finalStats, now);
-          saveReplayData(replayData);
-        }
+        recording.handleFinish(finalStats);
       }
       setSavedRecord(true);
     }
-  }, [finished, savedRecord, song.id, difficulty, isPractice, checkpoints]);
+  }, [finished, savedRecord, song.id, difficulty, isPractice, comparison.checkpoints, recording]);
 
   function handleStart() {
     setStarted(true);
@@ -458,21 +391,11 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     setLastJudge(null);
     setJudgeKey(0);
     setPressedTracks(new Array(TRACK_COUNT).fill(false));
-    setCheckpoints([]);
-    setLiveComparison(null);
-    lastCheckpointPercentRef.current = -1;
-    currentStatsRef.current = {
-      score: 0, combo: 0, maxCombo: 0,
-      perfectCount: 0, goodCount: 0, missCount: 0,
-      tapPerfectCount: 0, tapGoodCount: 0, tapMissCount: 0,
-      longPerfectCount: 0, longGoodCount: 0, longMissCount: 0,
-    };
+    comparison.reset();
+    currentStatsRef.current = createEmptyStats();
     finalStatsRef.current = null;
     activePointersRef.current.clear();
-    const cal = getEffectiveCalibration(song.id);
-    recorderRef.current = new InputRecorder(song.id, difficulty, cal.value, cal.source);
-    recorderRef.current.setChartSnapshot(chart);
-    recorderHadPauseRef.current = false;
+    recording.initRecorder(calibration.effectiveCalibration, chart);
     playerRef.current?.start();
   }
 
@@ -510,15 +433,8 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     setLastJudge(null);
     setJudgeKey(0);
     setPressedTracks(new Array(TRACK_COUNT).fill(false));
-    setCheckpoints([]);
-    setLiveComparison(null);
-    lastCheckpointPercentRef.current = -1;
-    currentStatsRef.current = {
-      score: 0, combo: 0, maxCombo: 0,
-      perfectCount: 0, goodCount: 0, missCount: 0,
-      tapPerfectCount: 0, tapGoodCount: 0, tapMissCount: 0,
-      longPerfectCount: 0, longGoodCount: 0, longMissCount: 0,
-    };
+    comparison.reset();
+    currentStatsRef.current = createEmptyStats();
     finalStatsRef.current = null;
     activePointersRef.current.clear();
     playerRef.current?.restart();
@@ -532,7 +448,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     const calibratedMs = playerRef.current.getCalibratedElapsed();
     const calibrationOffset = playerRef.current.getCalibrationOffset();
     const deviceBaseline = playerRef.current.getDeviceBaselineOffset();
-    recorderRef.current?.recordInput("press", track, elapsedMs, calibratedMs, calibrationOffset, deviceBaseline);
+    recording.recordInput("press", track, elapsedMs, calibratedMs, calibrationOffset, deviceBaseline);
 
     setPressedTracks((prev) => {
       const next = [...prev];
@@ -550,7 +466,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     const calibratedMs = playerRef.current.getCalibratedElapsed();
     const calibrationOffset = playerRef.current.getCalibrationOffset();
     const deviceBaseline = playerRef.current.getDeviceBaselineOffset();
-    recorderRef.current?.recordInput("release", track, elapsedMs, calibratedMs, calibrationOffset, deviceBaseline);
+    recording.recordInput("release", track, elapsedMs, calibratedMs, calibrationOffset, deviceBaseline);
 
     setPressedTracks((prev) => {
       const next = [...prev];
@@ -676,7 +592,6 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
 
   const isPlaying = started && !paused && !finished;
 
-  const chart = useMemo(() => getChartForSong(song.id, difficulty), [song.id, difficulty]);
   const segmentNotes = useMemo(() => {
     if (!practiceSegment) return chart.notes;
     return chart.notes.filter(
@@ -692,11 +607,6 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
   const H = trackHeightPx || 560;
   const hitLineY = H * HIT_ZONE_RELATIVE;
 
-  const formatOffset = (ms: number): string => {
-    if (ms === 0) return "0 ms";
-    return ms > 0 ? `+${ms} ms` : `${ms} ms`;
-  };
-
   function progressToTop(p: number): number {
     return p * hitLineY;
   }
@@ -705,66 +615,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     ? Math.round((practiceSegment.endMs - practiceSegment.startMs) / 1000)
     : 0;
 
-  const comparisonAnalysis = useMemo(() => {
-    const baseline = comparisonBaselineRef.current;
-    if (!baseline || isPractice) return null;
-    const calcAcc = (p: number, g: number, m: number) => {
-      const total = p + g + m;
-      if (total === 0) return 0;
-      return ((p + g * 0.5) / total) * 100;
-    };
-    const tapAccCur = calcAcc(tapPerfectCount, tapGoodCount, tapMissCount);
-    const tapAccBest = calcAcc(
-      baseline.tapPerfectCount,
-      baseline.tapGoodCount,
-      baseline.tapMissCount
-    );
-    const longAccCur = calcAcc(longPerfectCount, longGoodCount, longMissCount);
-    const longAccBest = calcAcc(
-      baseline.longPerfectCount,
-      baseline.longGoodCount,
-      baseline.longMissCount
-    );
-    const overallAccCur = calcAcc(perfectCount, goodCount, missCount);
-    const overallAccBest = calcAcc(
-      baseline.perfectCount,
-      baseline.goodCount,
-      baseline.missCount
-    );
-    const scoreDiff = score - baseline.score;
-    const comboDiff = maxCombo - baseline.maxCombo;
-    return {
-      tap: {
-        current: tapAccCur,
-        best: tapAccBest,
-        diff: tapAccCur - tapAccBest,
-        perfectDiff: tapPerfectCount - baseline.tapPerfectCount,
-        goodDiff: tapGoodCount - baseline.tapGoodCount,
-        missDiff: tapMissCount - baseline.tapMissCount,
-      },
-      long: {
-        current: longAccCur,
-        best: longAccBest,
-        diff: longAccCur - longAccBest,
-        perfectDiff: longPerfectCount - baseline.longPerfectCount,
-        goodDiff: longGoodCount - baseline.longGoodCount,
-        missDiff: longMissCount - baseline.longMissCount,
-      },
-      overall: {
-        current: overallAccCur,
-        best: overallAccBest,
-        diff: overallAccCur - overallAccBest,
-      },
-      scoreDiff,
-      comboDiff,
-    };
-  }, [
-    isPractice, finished,
-    tapPerfectCount, tapGoodCount, tapMissCount,
-    longPerfectCount, longGoodCount, longMissCount,
-    perfectCount, goodCount, missCount,
-    score, maxCombo,
-  ]);
+  const comparisonAnalysis: ComparisonAnalysis | null = comparison.comparisonAnalysis;
 
   return (
     <div className={`game-play ${isPortrait ? "mobile-portrait" : "mobile-landscape"}`}>
@@ -799,20 +650,20 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
             <small>连击</small>
             <strong className="combo-num">{combo}</strong>
           </div>
-          {showBestComparison && liveComparison && started && !finished && (
+          {comparison.showBestComparison && comparison.liveComparison && started && !finished && (
             <div className="comparison-stats">
-              <div className={"comparison-item " + (liveComparison.isScoreBehind ? "behind" : "ahead")}>
+              <div className={"comparison-item " + (comparison.liveComparison.isScoreBehind ? "behind" : "ahead")}>
                 <small>分数差</small>
                 <strong>
-                  {liveComparison.scoreDiff >= 0 ? "+" : ""}
-                  {liveComparison.scoreDiff.toLocaleString()}
+                  {comparison.liveComparison.scoreDiff >= 0 ? "+" : ""}
+                  {comparison.liveComparison.scoreDiff.toLocaleString()}
                 </strong>
               </div>
-              <div className={"comparison-item " + (liveComparison.isComboBehind ? "behind" : "ahead")}>
+              <div className={"comparison-item " + (comparison.liveComparison.isComboBehind ? "behind" : "ahead")}>
                 <small>连击差</small>
                 <strong>
-                  {liveComparison.comboDiff >= 0 ? "+" : ""}
-                  {liveComparison.comboDiff}
+                  {comparison.liveComparison.comboDiff >= 0 ? "+" : ""}
+                  {comparison.liveComparison.comboDiff}
                 </strong>
               </div>
             </div>
@@ -839,11 +690,11 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
           }}
         />
         <span
-          className={`progress-time progress-calibration ${effectiveCalibration.source === "song" ? "calibration-song" : ""}`}
-          title={effectiveCalibration.source === "song" ? "使用单曲校准" : "使用全局校准"}
+          className={`progress-time progress-calibration ${calibration.effectiveCalibration.source === "song" ? "calibration-song" : ""}`}
+          title={calibration.effectiveCalibration.source === "song" ? "使用单曲校准" : "使用全局校准"}
         >
-          🎯 {formatOffset(effectiveCalibration.value)}
-          {effectiveCalibration.source === "song" ? " ♪" : ""}
+          🎯 {calibration.formatOffset(calibration.effectiveCalibration.value)}
+          {calibration.effectiveCalibration.source === "song" ? " ♪" : ""}
         </span>
         <span className="progress-time">
           {formatDuration(Math.floor(Math.max(0, elapsed - effectiveStartMs) / 1000))} /{" "}
@@ -1152,12 +1003,12 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
                 {chartDiffInfo.label}最高分：<strong>{bestScore.toLocaleString()}</strong>
               </p>
             )}
-            {!isPractice && bestPlaySummary && bestPlaySummary.checkpoints.length > 0 && (
+            {!isPractice && comparison.bestPlaySummary && comparison.bestPlaySummary.checkpoints.length > 0 && (
               <label className="comparison-toggle">
                 <input
                   type="checkbox"
-                  checked={showBestComparison}
-                  onChange={(e) => setShowBestComparison(e.target.checked)}
+                  checked={comparison.showBestComparison}
+                  onChange={(e) => comparison.setShowBestComparison(e.target.checked)}
                 />
                 <span>显示最佳记录进度对照</span>
               </label>
@@ -1229,30 +1080,25 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
             <div className="result-calibration">
               <span className="result-calibration-label">
                 延迟校准
-                {effectiveCalibration.source === "song" ? (
+                {calibration.effectiveCalibration.source === "song" ? (
                   <span className="result-calibration-source-badge song-badge">🎵 单曲</span>
                 ) : (
                   <span className="result-calibration-source-badge global-badge">🌐 全局</span>
                 )}
               </span>
               <strong className="result-calibration-value">
-                {formatOffset(effectiveCalibration.value)}
+                {calibration.formatOffset(calibration.effectiveCalibration.value)}
               </strong>
             </div>
 
             {!isPractice && (
               <div className="result-song-calibration">
-                {songCalibration !== null ? (
+                {calibration.songCalibration !== null ? (
                   <div className="song-calibration-info">
                     <span>当前歌曲已设置独立校准值</span>
                     <button
                       className="ghost-btn small-btn"
-                      onClick={() => {
-                        resetSongCalibrationOffset(song.id);
-                        setSongCalibration(null);
-                        setEffectiveCalibration(getEffectiveCalibration(song.id));
-                        playerRef.current?.refreshCalibration();
-                      }}
+                      onClick={calibration.handleResetSongCalibration}
                     >
                       🔄 清除单曲校准
                     </button>
@@ -1261,10 +1107,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
                   <div className="song-calibration-actions">
                     <button
                       className="ghost-btn small-btn"
-                      onClick={() => {
-                        setTempSongOffset(effectiveCalibration.value);
-                        setShowSongCalibration(true);
-                      }}
+                      onClick={calibration.handleOpenSongCalibration}
                     >
                       🎯 为本歌单独设置校准
                     </button>
@@ -1273,13 +1116,13 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
               </div>
             )}
 
-            {showSongCalibration && (
+            {calibration.showSongCalibration && (
               <div className="song-calibration-panel">
                 <div className="song-calibration-header">
                   <strong>设置单曲校准值</strong>
                   <button
                     className="ghost-btn small-btn"
-                    onClick={() => setShowSongCalibration(false)}
+                    onClick={() => calibration.setShowSongCalibration(false)}
                   >
                     ✕
                   </button>
@@ -1287,23 +1130,23 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
                 <div className="song-calibration-controls">
                   <button
                     className="calibration-adjust-btn"
-                    onClick={() => setTempSongOffset((v) => v - 5)}
+                    onClick={() => calibration.setTempSongOffset((v) => v - 5)}
                   >
                     −
                   </button>
                   <div className="calibration-value-display large">
-                    <strong>{formatOffset(tempSongOffset)}</strong>
+                    <strong>{calibration.formatOffset(calibration.tempSongOffset)}</strong>
                     <small>
-                      {tempSongOffset === 0
+                      {calibration.tempSongOffset === 0
                         ? "无偏移"
-                        : tempSongOffset > 0
+                        : calibration.tempSongOffset > 0
                         ? "判定提前"
                         : "判定延后"}
                     </small>
                   </div>
                   <button
                     className="calibration-adjust-btn"
-                    onClick={() => setTempSongOffset((v) => v + 5)}
+                    onClick={() => calibration.setTempSongOffset((v) => v + 5)}
                   >
                     +
                   </button>
@@ -1311,21 +1154,13 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
                 <div className="song-calibration-actions-row">
                   <button
                     className="ghost-btn"
-                    onClick={() => {
-                      setTempSongOffset(getCalibrationOffset());
-                    }}
+                    onClick={calibration.handleUseGlobalCalibration}
                   >
-                    ↺ 使用全局值 ({formatOffset(getCalibrationOffset())})
+                    ↺ 使用全局值 ({calibration.formatOffset(getCalibrationOffset())})
                   </button>
                   <button
                     className="start-btn"
-                    onClick={() => {
-                      saveSongCalibrationOffset(song.id, tempSongOffset);
-                      setSongCalibration(tempSongOffset);
-                      setEffectiveCalibration(getEffectiveCalibration(song.id));
-                      playerRef.current?.refreshCalibration();
-                      setShowSongCalibration(false);
-                    }}
+                    onClick={calibration.handleSaveSongCalibration}
                   >
                     💾 保存为本歌校准
                   </button>
