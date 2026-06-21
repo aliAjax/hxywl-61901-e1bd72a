@@ -44,11 +44,11 @@ export function parseChartKey(key: string): { songId: string; difficulty: ChartD
   return { songId, difficulty: difficulty as ChartDifficulty };
 }
 
-function makeScoreKey(songId: string, difficulty: ChartDifficulty): string {
+export function makeScoreKey(songId: string, difficulty: ChartDifficulty): string {
   return `${songId}__${difficulty}`;
 }
 
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   VERSION: "rhythm-resource-version",
   SONGS: "rhythm-songs",
   CHARTS: "rhythm-charts",
@@ -595,6 +595,191 @@ export function isVersionCompatible(stored: ResourceVersion | null): boolean {
   );
 }
 
+export function migrateLegacyBestScoresPure(
+  storage: Pick<Storage, "getItem" | "setItem" | "removeItem">
+): Record<string, number> {
+  const scores: Record<string, number> = {};
+  for (const song of defaultSongs) {
+    for (const diff of CHART_DIFFICULTIES) {
+      scores[makeScoreKey(song.id, diff)] = 0;
+    }
+    const legacyKey = `rhythm-best-${song.id}`;
+    const legacy = Number(storage.getItem(legacyKey) || 0);
+    if (legacy > 0) {
+      scores[makeScoreKey(song.id, "standard")] = legacy;
+    }
+    try {
+      storage.removeItem(legacyKey);
+    } catch {
+      // ignore
+    }
+  }
+  const existing = safeParseJSON<Record<string, number>>(
+    storage.getItem(STORAGE_KEYS.BEST_SCORES),
+    {}
+  );
+  for (const key of Object.keys(existing)) {
+    if (key.includes("__")) {
+      scores[key] = existing[key];
+    } else {
+      scores[makeScoreKey(key, "standard")] = existing[key];
+    }
+  }
+  storage.setItem(STORAGE_KEYS.BEST_SCORES, JSON.stringify(scores));
+  return { ...scores };
+}
+
+export function migrateLegacyRecordsPure(
+  storage: Pick<Storage, "getItem" | "setItem" | "removeItem">
+): PlayRecord[] | null {
+  const legacyKey = "rhythm-play-records";
+  const newKey = STORAGE_KEYS.PLAY_RECORDS;
+  const raw = storage.getItem(legacyKey);
+  if (!raw) return null;
+  const parsed = safeParseJSON<PlayRecord[]>(raw, []);
+  const normalized: PlayRecord[] = parsed.map((r) => ({
+    songId: r.songId,
+    difficulty: r.difficulty ?? "standard",
+    score: r.score,
+    maxCombo: r.maxCombo,
+    perfectCount: r.perfectCount,
+    goodCount: r.goodCount,
+    missCount: r.missCount,
+    tapPerfectCount: r.tapPerfectCount ?? 0,
+    tapGoodCount: r.tapGoodCount ?? 0,
+    tapMissCount: r.tapMissCount ?? 0,
+    longPerfectCount: r.longPerfectCount ?? 0,
+    longGoodCount: r.longGoodCount ?? 0,
+    longMissCount: r.longMissCount ?? 0,
+    completedAt: r.completedAt,
+  }));
+  storage.setItem(newKey, JSON.stringify(normalized));
+  if (legacyKey !== newKey) {
+    try {
+      storage.removeItem(legacyKey);
+    } catch {
+      // ignore
+    }
+  }
+  return normalized;
+}
+
+export function migrateLegacyCalibrationPure(
+  storage: Pick<Storage, "getItem" | "setItem" | "removeItem">
+): void {
+  const legacyKey = "rhythm-calibration-offset";
+  const newKey = STORAGE_KEYS.CALIBRATION;
+  if (legacyKey === newKey) return;
+  const raw = storage.getItem(legacyKey);
+  if (raw !== null) {
+    storage.setItem(newKey, raw);
+    try {
+      storage.removeItem(legacyKey);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function migrateCalibrationToV2Pure(
+  storage: Pick<Storage, "getItem" | "setItem">
+): CalibrationData {
+  const v1Raw = storage.getItem(STORAGE_KEYS.CALIBRATION);
+  const v2Raw = storage.getItem(STORAGE_KEYS.CALIBRATION_V2);
+
+  if (v2Raw !== null) {
+    try {
+      const parsed = JSON.parse(v2Raw);
+      if (parsed && typeof parsed.global === "number" && parsed.perSong) {
+        return parsed as CalibrationData;
+      }
+    } catch {
+      // invalid v2 data, will rebuild
+    }
+  }
+
+  let globalOffset = 0;
+  if (v1Raw !== null) {
+    globalOffset = Number(v1Raw) || 0;
+  }
+
+  const v2Data: CalibrationData = {
+    global: globalOffset,
+    perSong: {},
+  };
+
+  storage.setItem(STORAGE_KEYS.CALIBRATION_V2, JSON.stringify(v2Data));
+  return v2Data;
+}
+
+export function migrateLegacyTutorialPure(
+  storage: Pick<Storage, "getItem" | "setItem" | "removeItem">
+): void {
+  const legacyKey = "rhythm-tutorial-completed";
+  const newKey = STORAGE_KEYS.TUTORIAL;
+  if (legacyKey === newKey) return;
+  const raw = storage.getItem(legacyKey);
+  if (raw !== null) {
+    storage.setItem(newKey, raw);
+    try {
+      storage.removeItem(legacyKey);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function cleanOrphanedScoresPure(
+  storage: Pick<Storage, "getItem" | "setItem">
+): { cleaned: boolean; filteredScores: Record<string, number>; filteredRecords: PlayRecord[] } {
+  let cleaned = false;
+  const validSongIds = new Set(defaultSongs.map((s) => s.id));
+
+  const scores = safeParseJSON<Record<string, number>>(
+    storage.getItem(STORAGE_KEYS.BEST_SCORES),
+    {}
+  );
+  const filteredScores: Record<string, number> = {};
+  for (const key of Object.keys(scores)) {
+    let valid = false;
+    if (key.includes("__")) {
+      const parsed = parseChartKey(key);
+      if (parsed && validSongIds.has(parsed.songId) && typeof scores[key] === "number" && !Number.isNaN(scores[key])) {
+        valid = true;
+      }
+    }
+    if (valid) {
+      filteredScores[key] = scores[key];
+    } else {
+      cleaned = true;
+    }
+  }
+  if (cleaned) {
+    storage.setItem(STORAGE_KEYS.BEST_SCORES, JSON.stringify(filteredScores));
+  }
+
+  const records = safeParseJSON<PlayRecord[]>(
+    storage.getItem(STORAGE_KEYS.PLAY_RECORDS),
+    []
+  );
+  const filteredRecords: PlayRecord[] = [];
+  for (const r of records) {
+    if (validSongIds.has(r.songId) && isValidPlayRecord(r)) {
+      filteredRecords.push({
+        ...r,
+        difficulty: r.difficulty ?? "standard",
+      });
+    } else {
+      cleaned = true;
+    }
+  }
+  if (cleaned || records.length !== filteredRecords.length) {
+    storage.setItem(STORAGE_KEYS.PLAY_RECORDS, JSON.stringify(filteredRecords));
+  }
+
+  return { cleaned, filteredScores, filteredRecords };
+}
+
 class ResourceManager {
   private memoryCache: {
     songs: Song[] | null;
@@ -744,126 +929,26 @@ class ResourceManager {
   }
 
   private migrateLegacyBestScores(): void {
-    const scores: Record<string, number> = {};
-    for (const song of defaultSongs) {
-      for (const diff of CHART_DIFFICULTIES) {
-        scores[makeScoreKey(song.id, diff)] = 0;
-      }
-      const legacyKey = `rhythm-best-${song.id}`;
-      const legacy = Number(localStorage.getItem(legacyKey) || 0);
-      if (legacy > 0) {
-        scores[makeScoreKey(song.id, "standard")] = legacy;
-      }
-      try {
-        localStorage.removeItem(legacyKey);
-      } catch {
-        // ignore
-      }
-    }
-    const existing = safeParseJSON<Record<string, number>>(
-      localStorage.getItem(STORAGE_KEYS.BEST_SCORES),
-      {}
-    );
-    for (const key of Object.keys(existing)) {
-      if (key.includes("__")) {
-        scores[key] = existing[key];
-      } else {
-        scores[makeScoreKey(key, "standard")] = existing[key];
-      }
-    }
-    localStorage.setItem(STORAGE_KEYS.BEST_SCORES, JSON.stringify(scores));
-    this.memoryCache.bestScores = { ...scores };
+    const result = migrateLegacyBestScoresPure(localStorage);
+    this.memoryCache.bestScores = result;
   }
 
   private migrateLegacyRecords(): void {
-    const legacyKey = "rhythm-play-records";
-    const newKey = STORAGE_KEYS.PLAY_RECORDS;
-    const raw = localStorage.getItem(legacyKey);
-    if (raw) {
-      const parsed = safeParseJSON<PlayRecord[]>(raw, []);
-      const normalized: PlayRecord[] = parsed.map((r) => ({
-        songId: r.songId,
-        difficulty: r.difficulty ?? "standard",
-        score: r.score,
-        maxCombo: r.maxCombo,
-        perfectCount: r.perfectCount,
-        goodCount: r.goodCount,
-        missCount: r.missCount,
-        tapPerfectCount: r.tapPerfectCount ?? 0,
-        tapGoodCount: r.tapGoodCount ?? 0,
-        tapMissCount: r.tapMissCount ?? 0,
-        longPerfectCount: r.longPerfectCount ?? 0,
-        longGoodCount: r.longGoodCount ?? 0,
-        longMissCount: r.longMissCount ?? 0,
-        completedAt: r.completedAt,
-      }));
-      localStorage.setItem(newKey, JSON.stringify(normalized));
-      if (legacyKey !== newKey) {
-        try {
-          localStorage.removeItem(legacyKey);
-        } catch {
-          // ignore
-        }
-      }
-      this.memoryCache.playRecords = normalized;
-    }
+    const result = migrateLegacyRecordsPure(localStorage);
+    if (result) this.memoryCache.playRecords = result;
   }
 
   private migrateLegacyCalibration(): void {
-    const legacyKey = "rhythm-calibration-offset";
-    const newKey = STORAGE_KEYS.CALIBRATION;
-    if (legacyKey === newKey) return;
-    const raw = localStorage.getItem(legacyKey);
-    if (raw !== null) {
-      localStorage.setItem(newKey, raw);
-      try {
-        localStorage.removeItem(legacyKey);
-      } catch {
-        // ignore
-      }
-    }
+    migrateLegacyCalibrationPure(localStorage);
   }
 
   private migrateCalibrationToV2(): void {
-    const v1Raw = localStorage.getItem(STORAGE_KEYS.CALIBRATION);
-    const v2Raw = localStorage.getItem(STORAGE_KEYS.CALIBRATION_V2);
-
-    if (v2Raw !== null) {
-      try {
-        const parsed = JSON.parse(v2Raw);
-        if (parsed && typeof parsed.global === "number" && parsed.perSong) {
-          return;
-        }
-      } catch {
-        // invalid v2 data, will rebuild
-      }
-    }
-
-    let globalOffset = 0;
-    if (v1Raw !== null) {
-      globalOffset = Number(v1Raw) || 0;
-    }
-
-    const v2Data: CalibrationData = {
-      global: globalOffset,
-      perSong: {},
-    };
-
-    localStorage.setItem(STORAGE_KEYS.CALIBRATION_V2, JSON.stringify(v2Data));
+    migrateCalibrationToV2Pure(localStorage);
   }
 
   private readCalibrationData(): CalibrationData {
-    this.migrateCalibrationToV2();
-    const raw = localStorage.getItem(STORAGE_KEYS.CALIBRATION_V2);
-    try {
-      const parsed = JSON.parse(raw || "{}");
-      if (parsed && typeof parsed.global === "number" && parsed.perSong) {
-        return parsed;
-      }
-    } catch {
-      // ignore
-    }
-    return { global: 0, perSong: {} };
+    const v2 = migrateCalibrationToV2Pure(localStorage);
+    return v2;
   }
 
   private writeCalibrationData(data: CalibrationData): void {
@@ -872,67 +957,15 @@ class ResourceManager {
   }
 
   private migrateLegacyTutorial(): void {
-    const legacyKey = "rhythm-tutorial-completed";
-    const newKey = STORAGE_KEYS.TUTORIAL;
-    if (legacyKey === newKey) return;
-    const raw = localStorage.getItem(legacyKey);
-    if (raw !== null) {
-      localStorage.setItem(newKey, raw);
-      try {
-        localStorage.removeItem(legacyKey);
-      } catch {
-        // ignore
-      }
-    }
+    migrateLegacyTutorialPure(localStorage);
   }
 
   private cleanOrphanedScores(): boolean {
-    let cleaned = false;
-    const validSongIds = new Set(defaultSongs.map((s) => s.id));
-
-    const scores = safeParseJSON<Record<string, number>>(
-      localStorage.getItem(STORAGE_KEYS.BEST_SCORES),
-      {}
-    );
-    const filteredScores: Record<string, number> = {};
-    for (const key of Object.keys(scores)) {
-      let valid = false;
-      if (key.includes("__")) {
-        const parsed = parseChartKey(key);
-        if (parsed && validSongIds.has(parsed.songId) && typeof scores[key] === "number" && !Number.isNaN(scores[key])) {
-          valid = true;
-        }
-      }
-      if (valid) {
-        filteredScores[key] = scores[key];
-      } else {
-        cleaned = true;
-      }
-    }
+    const { cleaned, filteredScores, filteredRecords } = cleanOrphanedScoresPure(localStorage);
     if (cleaned) {
-      localStorage.setItem(STORAGE_KEYS.BEST_SCORES, JSON.stringify(filteredScores));
       this.memoryCache.bestScores = filteredScores;
     }
-
-    const records = safeParseJSON<PlayRecord[]>(
-      localStorage.getItem(STORAGE_KEYS.PLAY_RECORDS),
-      []
-    );
-    const filteredRecords: PlayRecord[] = [];
-    for (const r of records) {
-      if (validSongIds.has(r.songId) && isValidPlayRecord(r)) {
-        filteredRecords.push({
-          ...r,
-          difficulty: r.difficulty ?? "standard",
-        });
-      } else {
-        cleaned = true;
-      }
-    }
-    if (cleaned || records.length !== filteredRecords.length) {
-      localStorage.setItem(STORAGE_KEYS.PLAY_RECORDS, JSON.stringify(filteredRecords));
-      this.memoryCache.playRecords = filteredRecords;
-    }
+    this.memoryCache.playRecords = filteredRecords;
 
     return cleaned;
   }
