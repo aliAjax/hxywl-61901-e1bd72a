@@ -16,7 +16,7 @@ import {
   CHART_DIFFICULTIES,
   CHART_DIFFICULTY_INFO,
 } from "./songs";
-import { getChartForSong } from "./charts";
+import { getChartForSong, isChartCustom } from "./charts";
 import ChartPreview from "./ChartPreview";
 
 interface SongSelectProps {
@@ -29,6 +29,7 @@ interface SongSelectProps {
   onOpenScorebook: (songId?: string | null, difficulty?: ChartDifficulty | null) => void;
   onOpenSettings: () => void;
   onStartPractice?: (songId: string, difficulty: ChartDifficulty, startMs: number, endMs: number) => void;
+  onOpenEditor?: (songId: string, difficulty: ChartDifficulty) => void;
 }
 
 export default function SongSelect({
@@ -41,6 +42,7 @@ export default function SongSelect({
   onOpenScorebook,
   onOpenSettings,
   onStartPractice,
+  onOpenEditor,
 }: SongSelectProps) {
   const [previewingSongId, setPreviewingSongId] = useState<string | null>(null);
   const [previewStep, setPreviewStep] = useState(-1);
@@ -559,6 +561,15 @@ export default function SongSelect({
             >
               ▶ 开始演奏 · {currentDiffInfo.label}
             </button>
+
+            {onOpenEditor && (
+              <button
+                className="editor-entry-btn"
+                onClick={() => onOpenEditor(selectedSong.id, selectedDifficulty)}
+              >
+                ✏️ {isChartCustom(selectedSong.id, selectedDifficulty) ? "编辑自定义谱面" : "编辑谱面"}
+              </button>
+            )}
 
             <button
               className="preview-large-btn"

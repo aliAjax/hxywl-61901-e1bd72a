@@ -45,7 +45,18 @@ export interface PracticeSegment {
   endMs: number;
 }
 
-export type PageType = "select" | "play" | "tutorial" | "scorebook" | "settings" | "calibration";
+export type PageType = "select" | "play" | "tutorial" | "scorebook" | "settings" | "calibration" | "editor";
+
+export interface ChartValidationError {
+  type: "time" | "track" | "duration" | "overlap";
+  noteId?: number;
+  message: string;
+}
+
+export interface ChartValidationResult {
+  valid: boolean;
+  errors: ChartValidationError[];
+}
 
 export interface ChartNote {
   id: number;

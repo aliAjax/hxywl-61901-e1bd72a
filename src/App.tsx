@@ -6,6 +6,7 @@ import Tutorial from "./Tutorial";
 import ScoreBook from "./ScoreBook";
 import Calibration from "./Calibration";
 import Settings from "./Settings";
+import ChartEditor from "./ChartEditor";
 import type { Song, PageType, ResourceInitResult, PracticeSegment, ChartDifficulty } from "./types";
 import { songs, isTutorialCompleted } from "./songs";
 import { resourceManager, CHART_DIFFICULTIES } from "./resourceManager";
@@ -30,6 +31,8 @@ function App() {
   const [scorebookSongId, setScorebookSongId] = useState<string | null>(null);
   const [calibrationReturnPage, setCalibrationReturnPage] = useState<PageType>("select");
   const [practiceSegment, setPracticeSegment] = useState<PracticeSegment | null>(null);
+  const [editorSongId, setEditorSongId] = useState<string | null>(null);
+  const [editorDifficulty, setEditorDifficulty] = useState<ChartDifficulty>("standard");
 
   const selectedSong = songs.find((s) => s.id === selectedSongId) || songs[0];
 
@@ -143,6 +146,16 @@ function App() {
     setPage("tutorial");
   }
 
+  function handleOpenEditor(songId: string, difficulty: ChartDifficulty) {
+    setEditorSongId(songId);
+    setEditorDifficulty(difficulty);
+    setPage("editor");
+  }
+
+  function handleBackFromEditor() {
+    setPage("select");
+  }
+
   if (!initChecked) {
     return (
       <main className="game-shell">
@@ -192,6 +205,7 @@ function App() {
           onOpenScorebook={handleOpenScorebook}
           onOpenSettings={handleOpenSettings}
           onStartPractice={handleStartPractice}
+          onOpenEditor={handleOpenEditor}
         />
       )}
 
@@ -224,6 +238,14 @@ function App() {
       {page === "calibration" && (
         <Calibration
           onBack={handleBackFromCalibration}
+        />
+      )}
+
+      {page === "editor" && editorSongId && (
+        <ChartEditor
+          songId={editorSongId}
+          initialDifficulty={editorDifficulty}
+          onBack={handleBackFromEditor}
         />
       )}
     </main>
