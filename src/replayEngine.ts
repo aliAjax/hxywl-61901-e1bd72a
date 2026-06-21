@@ -345,9 +345,9 @@ export function runReplay(chart: Chart, replayData: ReplayData, options: ReplayR
     trackHeldNoteId.set(track, null);
   }
 
-  function getEffectiveCalibrated(e: { elapsedMs: number; calibratedElapsedMs: number }): number {
+  function getEffectiveCalibrated(e: { elapsedMs: number; calibratedElapsedMs: number; deviceBaselineOffsetMs: number }): number {
     if (options.calibrationOverrideMs != null) {
-      return e.elapsedMs + options.calibrationOverrideMs;
+      return e.elapsedMs - options.calibrationOverrideMs - e.deviceBaselineOffsetMs;
     }
     return e.calibratedElapsedMs;
   }
