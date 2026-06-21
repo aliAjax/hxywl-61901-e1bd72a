@@ -23,6 +23,17 @@ export interface NoteVisualUpdate {
   interpolationMs: number;
 }
 
+export interface JudgeDetailEvent {
+  noteId: number;
+  track: number;
+  noteType: NoteType;
+  phase: "start" | "end";
+  judge: JudgeType;
+  distanceMs: number;
+  elapsedMs: number;
+  calibratedElapsedMs: number;
+}
+
 export interface ChartPlayerCallbacks {
   onNoteSpawn: (note: SpawnedNote) => void;
   onNoteUpdate: (update: NoteVisualUpdate) => void;
@@ -35,6 +46,7 @@ export interface ChartPlayerCallbacks {
   onLongNoteHoldChange: (noteId: number, isHolding: boolean) => void;
   onSyncDiagnostics?: (diagnostics: SyncDiagnostics) => void;
   onStateChange?: (state: "idle" | "playing" | "paused" | "finished") => void;
+  onJudgeDetail?: (detail: JudgeDetailEvent) => void;
 }
 
 export interface SpawnedNote {
@@ -163,13 +175,17 @@ export class ChartPlayer {
     return { ...this.currentCalibration };
   }
 
+  getDeviceBaselineOffset(): number {
+    return this.syncEngine.getDeviceBaselineOffset();
+  }
+
   refreshCalibration() {
     this.currentCalibration = getEffectiveCalibration(this.song.id);
     this.syncEngine.setTouchCalibrationOffset(this.currentCalibration.value);
     this.syncEngine.setCalibrationSource(this.currentCalibration.source);
   }
 
-  private getCalibratedElapsed(): number {
+  getCalibratedElapsed(): number {
     return this.syncEngine.getCalibratedElapsedMs();
   }
 
@@ -402,6 +418,7 @@ export class ChartPlayer {
   judgeTrackPress(track: number) {
     if (!this.syncEngine.isPlaying()) return;
     const elapsed = this.getCalibratedElapsed();
+    const rawElapsed = this.syncEngine.getElapsedMs();
 
     let hitNote: ChartNote | null = null;
     let hitNoteActiveId: number | null = null;
@@ -436,6 +453,18 @@ export class ChartPlayer {
             active.judged = true;
             this.cb.onNoteJudge(hitNoteActiveId, judge);
             this.applyJudge(judge, track, "tap");
+            if (this.cb.onJudgeDetail) {
+              this.cb.onJudgeDetail({
+                noteId: hitNoteActiveId,
+                track,
+                noteType: "tap",
+                phase: "start",
+                judge,
+                distanceMs: hitDistance,
+                elapsedMs: rawElapsed,
+                calibratedElapsedMs: elapsed,
+              });
+            }
           } else {
             active.longStartJudged = true;
             active.longStartJudgeType = judge;
@@ -444,12 +473,36 @@ export class ChartPlayer {
             this.cb.onNoteJudge(hitNoteActiveId, judge, "start");
             this.cb.onLongNoteHoldChange(hitNoteActiveId, true);
             this.applyJudge(judge, track, "long");
+            if (this.cb.onJudgeDetail) {
+              this.cb.onJudgeDetail({
+                noteId: hitNoteActiveId,
+                track,
+                noteType: "long",
+                phase: "start",
+                judge,
+                distanceMs: hitDistance,
+                elapsedMs: rawElapsed,
+                calibratedElapsedMs: elapsed,
+              });
+            }
           }
         }
         this.playHitSound(track);
       }
     } else {
       this.applyJudge("miss", track, "tap");
+      if (this.cb.onJudgeDetail) {
+        this.cb.onJudgeDetail({
+          noteId: -1,
+          track,
+          noteType: "tap",
+          phase: "start",
+          judge: "miss",
+          distanceMs: 0,
+          elapsedMs: rawElapsed,
+          calibratedElapsedMs: elapsed,
+        });
+      }
     }
   }
 
@@ -468,6 +521,7 @@ export class ChartPlayer {
       return;
     }
     const elapsed = this.getCalibratedElapsed();
+    const rawElapsed = this.syncEngine.getElapsedMs();
     const held = this.trackHeldState.get(track);
     if (!held || held.noteId === null) return;
 
@@ -486,6 +540,18 @@ export class ChartPlayer {
       active.longEndJudged = true;
       this.cb.onLongNoteHoldChange(noteId, false);
       this.cb.onNoteJudge(noteId, "miss", "end");
+      if (this.cb.onJudgeDetail) {
+        this.cb.onJudgeDetail({
+          noteId,
+          track,
+          noteType: "long",
+          phase: "end",
+          judge: "miss",
+          distanceMs: 0,
+          elapsedMs: rawElapsed,
+          calibratedElapsedMs: elapsed,
+        });
+      }
       held.noteId = null;
       return;
     }
@@ -510,6 +576,18 @@ export class ChartPlayer {
     active.judged = true;
     active.longEndJudged = true;
     this.cb.onNoteJudge(noteId, endJudge, "end");
+    if (this.cb.onJudgeDetail) {
+      this.cb.onJudgeDetail({
+        noteId,
+        track,
+        noteType: "long",
+        phase: "end",
+        judge: endJudge,
+        distanceMs: distance,
+        elapsedMs: rawElapsed,
+        calibratedElapsedMs: elapsed,
+      });
+    }
     this.playHitSound(track);
     held.noteId = null;
   }
@@ -600,6 +678,18 @@ export class ChartPlayer {
             active.missed = true;
             this.cb.onNoteJudge(id, "miss");
             this.applyJudge("miss", active.track, "tap");
+            if (this.cb.onJudgeDetail) {
+              this.cb.onJudgeDetail({
+                noteId: id,
+                track: active.track,
+                noteType: "tap",
+                phase: "start",
+                judge: "miss",
+                distanceMs: timePastTarget,
+                elapsedMs: elapsed,
+                calibratedElapsedMs: calibrated,
+              });
+            }
           }
         } else {
           if (!active.longStartJudged) {
@@ -609,6 +699,18 @@ export class ChartPlayer {
               active.longStartJudged = true;
               this.cb.onNoteJudge(id, "miss", "start");
               this.applyJudge("miss", active.track, "long");
+              if (this.cb.onJudgeDetail) {
+                this.cb.onJudgeDetail({
+                  noteId: id,
+                  track: active.track,
+                  noteType: "long",
+                  phase: "start",
+                  judge: "miss",
+                  distanceMs: timePastStart,
+                  elapsedMs: elapsed,
+                  calibratedElapsedMs: calibrated,
+                });
+              }
               const held = this.trackHeldState.get(active.track);
               if (held && held.noteId === id) held.noteId = null;
             }
@@ -623,6 +725,18 @@ export class ChartPlayer {
                 this.cb.onLongNoteHoldChange(id, false);
                 this.cb.onNoteJudge(id, "miss", "end");
                 this.applyJudge("miss", active.track, "long");
+                if (this.cb.onJudgeDetail) {
+                  this.cb.onJudgeDetail({
+                    noteId: id,
+                    track: active.track,
+                    noteType: "long",
+                    phase: "end",
+                    judge: "miss",
+                    distanceMs: calibrated - endTime,
+                    elapsedMs: elapsed,
+                    calibratedElapsedMs: calibrated,
+                  });
+                }
                 const held = this.trackHeldState.get(active.track);
                 if (held && held.noteId === id) held.noteId = null;
               }
@@ -634,11 +748,35 @@ export class ChartPlayer {
                   active.judged = true;
                   this.cb.onNoteJudge(id, "miss", "end");
                   this.applyJudge("miss", active.track, "long");
+                  if (this.cb.onJudgeDetail) {
+                    this.cb.onJudgeDetail({
+                      noteId: id,
+                      track: active.track,
+                      noteType: "long",
+                      phase: "end",
+                      judge: "miss",
+                      distanceMs: timePastEnd,
+                      elapsedMs: elapsed,
+                      calibratedElapsedMs: calibrated,
+                    });
+                  }
                 }
               } else {
                 if (calibrated > endTime + LONG_NOTE_END_GOOD_WINDOW_MS) {
                   active.longEndJudged = true;
                   active.judged = true;
+                  if (this.cb.onJudgeDetail) {
+                    this.cb.onJudgeDetail({
+                      noteId: id,
+                      track: active.track,
+                      noteType: "long",
+                      phase: "end",
+                      judge: "miss",
+                      distanceMs: calibrated - endTime,
+                      elapsedMs: elapsed,
+                      calibratedElapsedMs: calibrated,
+                    });
+                  }
                 }
               }
             }

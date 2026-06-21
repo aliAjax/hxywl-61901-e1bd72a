@@ -19,13 +19,15 @@ import {
   computeLiveComparison,
   getKeyBindings,
   getButtonLayout,
+  saveReplayData,
 } from "./songs";
 import type { KeyBindings, ButtonLayout } from "./types";
 import {
-  ChartPlayer, type SpawnedNote, HIT_ZONE_RELATIVE, type NoteVisualUpdate
+  ChartPlayer, type SpawnedNote, HIT_ZONE_RELATIVE, type NoteVisualUpdate, type JudgeDetailEvent
 } from "./chartPlayer";
 import type { SyncDiagnostics } from "./audioSyncEngine";
 import { getChartForSong } from "./charts";
+import { InputRecorder } from "./inputRecorder";
 
 interface GamePlayProps {
   song: Song;
@@ -111,6 +113,8 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
   const bestScore = useMemo(() => getSongBestScore(song.id, difficulty), [song.id, difficulty]);
   const finalStatsRef = useRef<GameStats | null>(null);
   const activePointersRef = useRef<Map<number, number>>(new Map());
+  const recorderRef = useRef<InputRecorder | null>(null);
+  const recorderHadPauseRef = useRef(false);
 
   const trackLabels = useMemo(
     () => [keyBindings.track0, keyBindings.track1, keyBindings.track2, keyBindings.track3],
@@ -315,15 +319,33 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
       },
       onSyncDiagnostics: (diag: SyncDiagnostics) => {
         setSyncDiagnostics(diag);
+        recorderRef.current?.checkDiagnosticsDelta(diag);
       },
       onStateChange: (state) => {
         if (state === "paused") {
           setPaused(true);
+          recorderHadPauseRef.current = true;
+          recorderRef.current?.recordPause(playerRef.current?.getElapsedMs() ?? 0, Date.now());
         } else if (state === "playing") {
           setPaused(false);
+          if (recorderHadPauseRef.current) {
+            recorderRef.current?.recordResume(playerRef.current?.getElapsedMs() ?? 0, Date.now());
+          }
         } else if (state === "finished") {
           setPaused(false);
         }
+      },
+      onJudgeDetail: (detail: JudgeDetailEvent) => {
+        recorderRef.current?.recordJudge(
+          detail.noteId,
+          detail.track,
+          detail.noteType,
+          detail.phase,
+          detail.judge,
+          detail.distanceMs,
+          detail.elapsedMs,
+          detail.calibratedElapsedMs
+        );
       },
     }, {
       practiceStartMs: practiceSegment?.startMs,
@@ -364,6 +386,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
       if (!isPractice) {
         const finalStats = finalStatsRef.current;
         const finalScore = finalStats.score;
+        const now = Date.now();
         if (finalScore > 0) {
           saveSongBestScore(song.id, difficulty, finalScore);
         }
@@ -381,9 +404,8 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
           longPerfectCount: finalStats.longPerfectCount,
           longGoodCount: finalStats.longGoodCount,
           longMissCount: finalStats.longMissCount,
-          completedAt: Date.now(),
+          completedAt: now,
         });
-        const now = Date.now();
         if (checkpoints.length > 0 || finalScore > 0) {
           saveBestPlaySummary({
             songId: song.id,
@@ -402,6 +424,10 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
             checkpoints,
             completedAt: now,
           });
+        }
+        if (recorderRef.current) {
+          const replayData = recorderRef.current.buildReplayData(finalStats, now);
+          saveReplayData(replayData);
         }
       }
       setSavedRecord(true);
@@ -443,6 +469,9 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     };
     finalStatsRef.current = null;
     activePointersRef.current.clear();
+    const cal = getEffectiveCalibration(song.id);
+    recorderRef.current = new InputRecorder(song.id, difficulty, cal.value, cal.source);
+    recorderHadPauseRef.current = false;
     playerRef.current?.start();
   }
 
@@ -498,6 +527,12 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     if (!playerRef.current) return;
     if (!playerRef.current.isPlaying()) return;
 
+    const elapsedMs = playerRef.current.getElapsedMs();
+    const calibratedMs = playerRef.current.getCalibratedElapsed();
+    const calibrationOffset = playerRef.current.getCalibrationOffset();
+    const deviceBaseline = playerRef.current.getDeviceBaselineOffset();
+    recorderRef.current?.recordInput("press", track, elapsedMs, calibratedMs, calibrationOffset, deviceBaseline);
+
     setPressedTracks((prev) => {
       const next = [...prev];
       next[track] = true;
@@ -509,6 +544,12 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
 
   function handleTrackRelease(track: number) {
     if (!playerRef.current) return;
+
+    const elapsedMs = playerRef.current.getElapsedMs();
+    const calibratedMs = playerRef.current.getCalibratedElapsed();
+    const calibrationOffset = playerRef.current.getCalibrationOffset();
+    const deviceBaseline = playerRef.current.getDeviceBaselineOffset();
+    recorderRef.current?.recordInput("release", track, elapsedMs, calibratedMs, calibrationOffset, deviceBaseline);
 
     setPressedTracks((prev) => {
       const next = [...prev];

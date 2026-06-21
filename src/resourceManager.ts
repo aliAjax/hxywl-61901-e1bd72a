@@ -16,6 +16,7 @@ import type {
   KeyBindings,
   ButtonLayout,
   ControlSettings,
+  ReplayData,
 } from "./types";
 
 const CURRENT_SCHEMA_VERSION = 2;
@@ -60,6 +61,7 @@ const STORAGE_KEYS = {
   TUTORIAL: "rhythm-tutorial-completed",
   FAVORITES: "rhythm-favorite-songs",
   CONTROL_SETTINGS: "rhythm-control-settings",
+  REPLAY_DATA: "rhythm-replay-data",
 } as const;
 
 export const DEFAULT_KEY_BINDINGS: KeyBindings = {
@@ -1537,6 +1539,62 @@ class ResourceManager {
     }
 
     return { valid: true };
+  }
+
+  saveReplayData(replay: ReplayData): void {
+    this.ensureInitialized();
+    const all = safeParseJSON<Record<string, ReplayData>>(
+      localStorage.getItem(STORAGE_KEYS.REPLAY_DATA),
+      {}
+    );
+    const key = `${replay.songId}__${replay.difficulty}__${replay.completedAt}`;
+    all[key] = replay;
+    const keys = Object.keys(all).sort((a, b) => {
+      const tA = all[a].completedAt ?? 0;
+      const tB = all[b].completedAt ?? 0;
+      return tA - tB;
+    });
+    const maxPerSong = 5;
+    const grouped: Record<string, string[]> = {};
+    for (const k of keys) {
+      const songKey = all[k].songId + "__" + all[k].difficulty;
+      if (!grouped[songKey]) grouped[songKey] = [];
+      grouped[songKey].push(k);
+    }
+    const trimmed: Record<string, ReplayData> = {};
+    for (const songKey of Object.keys(grouped)) {
+      const songKeys = grouped[songKey].slice(-maxPerSong);
+      for (const k of songKeys) {
+        trimmed[k] = all[k];
+      }
+    }
+    localStorage.setItem(STORAGE_KEYS.REPLAY_DATA, JSON.stringify(trimmed));
+  }
+
+  getReplayData(songId: string, difficulty: ChartDifficulty, completedAt: number): ReplayData | null {
+    this.ensureInitialized();
+    const all = safeParseJSON<Record<string, ReplayData>>(
+      localStorage.getItem(STORAGE_KEYS.REPLAY_DATA),
+      {}
+    );
+    const key = `${songId}__${difficulty}__${completedAt}`;
+    return all[key] ?? null;
+  }
+
+  getReplayDataList(songId: string, difficulty: ChartDifficulty): ReplayData[] {
+    this.ensureInitialized();
+    const all = safeParseJSON<Record<string, ReplayData>>(
+      localStorage.getItem(STORAGE_KEYS.REPLAY_DATA),
+      {}
+    );
+    const results: ReplayData[] = [];
+    for (const key of Object.keys(all)) {
+      const r = all[key];
+      if (r.songId === songId && r.difficulty === difficulty) {
+        results.push(r);
+      }
+    }
+    return results.sort((a, b) => b.completedAt - a.completedAt);
   }
 }
 

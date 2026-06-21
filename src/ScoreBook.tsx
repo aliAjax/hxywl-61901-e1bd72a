@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import type { PlayRecord, ChartDifficulty } from "./types";
+import { useState, useMemo, useCallback } from "react";
+import type { PlayRecord, ChartDifficulty, ReplayData, ReplayVerificationResult } from "./types";
 import {
   songs,
   difficultyLabels,
@@ -14,8 +14,11 @@ import {
   GRADE_ORDER,
   CHART_DIFFICULTIES,
   CHART_DIFFICULTY_INFO,
+  getReplayData,
   type Grade,
 } from "./songs";
+import { getChartForSong } from "./charts";
+import { verifyReplay } from "./replayEngine";
 
 interface ScoreBookProps {
   initialSongId?: string | null;
@@ -29,6 +32,270 @@ function formatTime(ts: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function formatMs(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  const frac = Math.floor((ms % 1000) / 100);
+  return `${min}:${sec.toString().padStart(2, "0")}.${frac}`;
+}
+
+const TRACK_COLORS = ["#4f46e5", "#06b6d4", "#f97316", "#ec4899"];
+
+function ReplayTimeline({ replay }: { replay: ReplayData }) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
+  const allEvents = useMemo(() => {
+    const events: { kind: "input" | "judge" | "pause" | "sync"; time: number; data: unknown }[] = [];
+    for (const e of replay.inputEvents) {
+      events.push({ kind: "input", time: e.elapsedMs, data: e });
+    }
+    for (const e of replay.judgeEvents) {
+      events.push({ kind: "judge", time: e.elapsedMs, data: e });
+    }
+    for (const e of replay.pauseNodes) {
+      events.push({ kind: "pause", time: e.elapsedMs, data: e });
+    }
+    for (const e of replay.syncEvents) {
+      events.push({ kind: "sync", time: e.elapsedMs, data: e });
+    }
+    return events.sort((a, b) => a.time - b.time);
+  }, [replay]);
+
+  const maxTime = useMemo(() => {
+    if (allEvents.length === 0) return 1;
+    return Math.max(...allEvents.map((e) => e.time), 1);
+  }, [allEvents]);
+
+  const inputEvents = replay.inputEvents;
+  const judgeEvents = replay.judgeEvents.filter((e) => e.noteId >= 0);
+
+  return (
+    <div className="replay-timeline">
+      <div className="replay-timeline-header">
+        <span>时间轴 · {formatMs(maxTime)}</span>
+        <span className="replay-timeline-stats">
+          输入 {inputEvents.length} 次 · 判定 {judgeEvents.length} 次
+          {replay.pauseNodes.length > 0 && ` · 暂停 ${replay.pauseNodes.filter(p => p.type === "pause").length} 次`}
+          {replay.syncEvents.length > 0 && ` · 同步事件 ${replay.syncEvents.length} 次`}
+        </span>
+      </div>
+
+      <div className="replay-timeline-track-container">
+        {[0, 1, 2, 3].map((track) => {
+          const trackInputs = inputEvents.filter((e) => e.track === track);
+          const trackJudges = judgeEvents.filter((e) => e.track === track);
+          return (
+            <div key={track} className="replay-timeline-track-row">
+              <div className="replay-timeline-track-label" style={{ color: TRACK_COLORS[track] }}>
+                T{track + 1}
+              </div>
+              <div className="replay-timeline-track-bar" style={{ borderColor: TRACK_COLORS[track] + "40" }}>
+                {trackInputs.map((e, i) => (
+                  <div
+                    key={`in-${i}`}
+                    className={`replay-timeline-marker marker-input marker-${e.type}`}
+                    style={{
+                      left: `${(e.elapsedMs / maxTime) * 100}%`,
+                      backgroundColor: e.type === "press" ? TRACK_COLORS[track] : TRACK_COLORS[track] + "60",
+                    }}
+                    title={`${e.type === "press" ? "按下" : "松开"} T${track + 1} @ ${formatMs(e.elapsedMs)} | 校准 ${e.calibrationOffsetMs}ms`}
+                    onMouseEnter={() => setHoverIdx(i)}
+                    onMouseLeave={() => setHoverIdx(null)}
+                  />
+                ))}
+                {trackJudges.map((e, i) => {
+                  const judgeColor = e.judge === "perfect" ? "#34d399" : e.judge === "good" ? "#facc15" : "#ef4444";
+                  return (
+                    <div
+                      key={`jg-${i}`}
+                      className={`replay-timeline-marker marker-judge marker-judge-${e.judge}`}
+                      style={{
+                        left: `${(e.elapsedMs / maxTime) * 100}%`,
+                        backgroundColor: judgeColor,
+                        top: e.phase === "end" ? 12 : 2,
+                      }}
+                      title={`${e.judge?.toUpperCase()} T${track + 1} #${e.noteId} ${e.phase === "end" ? "尾" : "头"} | 偏差 ${e.distanceMs.toFixed(1)}ms`}
+                      onMouseEnter={() => setHoverIdx(inputEvents.length + i)}
+                      onMouseLeave={() => setHoverIdx(null)}
+                    />
+                  );
+                })}
+                {replay.pauseNodes
+                  .filter((p) => p.type === "pause")
+                  .map((p, i) => (
+                    <div
+                      key={`pause-${i}`}
+                      className="replay-timeline-marker marker-pause"
+                      style={{ left: `${(p.elapsedMs / maxTime) * 100}%` }}
+                      title={`暂停 @ ${formatMs(p.elapsedMs)}`}
+                    />
+                  ))}
+                {replay.syncEvents.map((s, i) => (
+                  <div
+                    key={`sync-${i}`}
+                    className="replay-timeline-marker marker-sync"
+                    style={{ left: `${(s.elapsedMs / maxTime) * 100}%` }}
+                    title={`${s.type === "visibility_change" ? "页面切换" : s.type === "low_frame" ? "低帧率" : "重同步"} @ ${formatMs(s.elapsedMs)}`}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="replay-timeline-legend">
+        <span className="legend-item"><span className="legend-dot" style={{ backgroundColor: "#4f46e5" }} /> 按下</span>
+        <span className="legend-item"><span className="legend-dot" style={{ backgroundColor: "#4f46e560" }} /> 松开</span>
+        <span className="legend-item"><span className="legend-dot" style={{ backgroundColor: "#34d399" }} /> Perfect</span>
+        <span className="legend-item"><span className="legend-dot" style={{ backgroundColor: "#facc15" }} /> Good</span>
+        <span className="legend-item"><span className="legend-dot" style={{ backgroundColor: "#ef4444" }} /> Miss</span>
+        <span className="legend-item"><span className="legend-dot" style={{ backgroundColor: "#f97316" }} /> 暂停</span>
+        <span className="legend-item"><span className="legend-dot" style={{ backgroundColor: "#a78bfa" }} /> 同步事件</span>
+      </div>
+
+      <div className="replay-timeline-details">
+        <div className="replay-details-section">
+          <div className="replay-details-title">输入记录 ({inputEvents.length})</div>
+          <div className="replay-details-list">
+            {inputEvents.slice(0, 50).map((e, i) => (
+              <div key={i} className="replay-detail-row">
+                <span className={`detail-type ${e.type}`}>{e.type === "press" ? "▼" : "▲"}</span>
+                <span className="detail-track" style={{ color: TRACK_COLORS[e.track] }}>T{e.track + 1}</span>
+                <span className="detail-time">{formatMs(e.elapsedMs)}</span>
+                <span className="detail-calib">校准 {e.calibrationOffsetMs}ms</span>
+                <span className="detail-baseline">基准 {e.deviceBaselineOffsetMs}ms</span>
+              </div>
+            ))}
+            {inputEvents.length > 50 && <div className="detail-more">... 共 {inputEvents.length} 条</div>}
+          </div>
+        </div>
+
+        <div className="replay-details-section">
+          <div className="replay-details-title">判定记录 ({judgeEvents.length})</div>
+          <div className="replay-details-list">
+            {judgeEvents.slice(0, 50).map((e, i) => (
+              <div key={i} className="replay-detail-row">
+                <span className={`detail-judge judge-${e.judge}`}>{e.judge?.toUpperCase()}</span>
+                <span className="detail-track" style={{ color: TRACK_COLORS[e.track] }}>T{e.track + 1}</span>
+                <span className="detail-note-type">{e.noteType === "long" ? "长按" : "点击"}</span>
+                <span className="detail-phase">{e.phase === "start" ? "头" : "尾"}</span>
+                <span className="detail-time">{formatMs(e.elapsedMs)}</span>
+                <span className="detail-distance">偏差 {e.distanceMs.toFixed(1)}ms</span>
+              </div>
+            ))}
+            {judgeEvents.length > 50 && <div className="detail-more">... 共 {judgeEvents.length} 条</div>}
+          </div>
+        </div>
+
+        {replay.syncEvents.length > 0 && (
+          <div className="replay-details-section">
+            <div className="replay-details-title">同步事件 ({replay.syncEvents.length})</div>
+            <div className="replay-details-list">
+              {replay.syncEvents.map((e, i) => (
+                <div key={i} className="replay-detail-row">
+                  <span className="detail-sync-type">
+                    {e.type === "visibility_change" ? "页面切换" : e.type === "low_frame" ? "低帧率" : "重同步"}
+                  </span>
+                  <span className="detail-time">{formatMs(e.elapsedMs)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {replay.pauseNodes.length > 0 && (
+          <div className="replay-details-section">
+            <div className="replay-details-title">暂停/恢复节点 ({replay.pauseNodes.length})</div>
+            <div className="replay-details-list">
+              {replay.pauseNodes.map((e, i) => (
+                <div key={i} className="replay-detail-row">
+                  <span className={`detail-pause-type ${e.type}`}>
+                    {e.type === "pause" ? "暂停" : "恢复"}
+                  </span>
+                  <span className="detail-time">{formatMs(e.elapsedMs)}</span>
+                  <span className="detail-ts">{new Date(e.timestamp).toLocaleTimeString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReplayVerification({ replay }: { replay: ReplayData }) {
+  const [result, setResult] = useState<ReplayVerificationResult | null>(null);
+  const [running, setRunning] = useState(false);
+
+  const handleVerify = useCallback(() => {
+    setRunning(true);
+    const chart = getChartForSong(replay.songId, replay.difficulty);
+    setTimeout(() => {
+      const r = verifyReplay(chart, replay);
+      setResult(r);
+      setRunning(false);
+    }, 0);
+  }, [replay]);
+
+  return (
+    <div className="replay-verification">
+      <div className="replay-verification-header">
+        <span>分数核对</span>
+        <button className="replay-verify-btn" onClick={handleVerify} disabled={running}>
+          {running ? "核对中..." : "运行核对"}
+        </button>
+      </div>
+      {result && (
+        <div className={`replay-verification-result ${result.match ? "match" : "mismatch"}`}>
+          <div className="verification-status">
+            {result.match ? "✅ 核对通过：重放分数与原始记录一致" : "⚠️ 核对发现差异"}
+          </div>
+          {result.differences.length > 0 && (
+            <div className="verification-diffs">
+              <div className="verification-diff-title">统计差异：</div>
+              {result.differences.map((d, i) => (
+                <div key={i} className="verification-diff-row">
+                  <span className="diff-field">{d.field}</span>
+                  <span className="diff-original">原始: {d.original}</span>
+                  <span className="diff-replay">重放: {d.replay}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {result.perNoteMismatches.length > 0 && (
+            <div className="verification-diffs">
+              <div className="verification-diff-title">逐音符差异 ({result.perNoteMismatches.length})：</div>
+              {result.perNoteMismatches.slice(0, 20).map((m, i) => (
+                <div key={i} className="verification-diff-row">
+                  <span className="diff-note">音符 #{m.noteId} {m.phase === "end" ? "尾" : "头"}</span>
+                  <span className="diff-original">原始: {m.original}</span>
+                  <span className="diff-replay">重放: {m.replay}</span>
+                </div>
+              ))}
+              {result.perNoteMismatches.length > 20 && (
+                <div className="detail-more">... 共 {result.perNoteMismatches.length} 条差异</div>
+              )}
+            </div>
+          )}
+          <div className="verification-summary">
+            <div className="verification-summary-row">
+              <span>原始分数</span>
+              <strong>{Math.floor(result.originalStats.score).toLocaleString()}</strong>
+            </div>
+            <div className="verification-summary-row">
+              <span>重放分数</span>
+              <strong>{Math.floor(result.replayStats.score).toLocaleString()}</strong>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ScoreBook({ initialSongId, initialDifficulty, onBack }: ScoreBookProps) {
   const [activeSongId, setActiveSongId] = useState<string>(
     initialSongId || songs[0].id
@@ -36,12 +303,18 @@ export default function ScoreBook({ initialSongId, initialDifficulty, onBack }: 
   const [activeDifficulty, setActiveDifficulty] = useState<ChartDifficulty>(
     initialDifficulty || "standard"
   );
+  const [viewingReplayAt, setViewingReplayAt] = useState<number | null>(null);
 
   const activeSong = songs.find((s) => s.id === activeSongId) || songs[0];
   const activeDiffInfo = CHART_DIFFICULTY_INFO[activeDifficulty];
   const records: PlayRecord[] = getPlayRecords(activeSongId, activeDifficulty)
     .sort((a, b) => b.completedAt - a.completedAt);
   const best = getSongBestScore(activeSongId, activeDifficulty);
+
+  const viewingReplay = useMemo(() => {
+    if (viewingReplayAt === null) return null;
+    return getReplayData(activeSongId, activeDifficulty, viewingReplayAt);
+  }, [viewingReplayAt, activeSongId, activeDifficulty]);
 
   const recentStats = useMemo(() => {
     if (records.length === 0) return null;
@@ -76,6 +349,51 @@ export default function ScoreBook({ initialSongId, initialDifficulty, onBack }: 
       overallGrade,
     };
   }, [records]);
+
+  if (viewingReplay) {
+    return (
+      <div className="scorebook">
+        <header className="scorebook-header">
+          <button className="back-btn" onClick={() => setViewingReplayAt(null)}>
+            ← 返回记录
+          </button>
+          <div className="scorebook-title-group">
+            <h1 className="scorebook-title">回放详情</h1>
+            <p className="scorebook-subtitle">
+              {activeSong.title} · {activeDiffInfo.label} · {formatTime(viewingReplayAt ?? 0)}
+            </p>
+          </div>
+        </header>
+        <div className="replay-view">
+          <div className="replay-meta">
+            <div className="replay-meta-item">
+              <small>校准值</small>
+              <strong>{viewingReplay.calibrationAtStart.value}ms ({viewingReplay.calibrationAtStart.source === "song" ? "单曲" : "全局"})</strong>
+            </div>
+            <div className="replay-meta-item">
+              <small>输入次数</small>
+              <strong>{viewingReplay.inputEvents.length}</strong>
+            </div>
+            <div className="replay-meta-item">
+              <small>判定次数</small>
+              <strong>{viewingReplay.judgeEvents.length}</strong>
+            </div>
+            <div className="replay-meta-item">
+              <small>暂停次数</small>
+              <strong>{viewingReplay.pauseNodes.filter(p => p.type === "pause").length}</strong>
+            </div>
+            <div className="replay-meta-item">
+              <small>同步事件</small>
+              <strong>{viewingReplay.syncEvents.length}</strong>
+            </div>
+          </div>
+
+          <ReplayTimeline replay={viewingReplay} />
+          <ReplayVerification replay={viewingReplay} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="scorebook">
@@ -252,6 +570,7 @@ export default function ScoreBook({ initialSongId, initialDifficulty, onBack }: 
                 const isBest = record.score >= best && best > 0;
                 const accuracy = calcRecordAccuracy(record);
                 const grade = calcRecordGrade(record);
+                const hasReplay = getReplayData(activeSongId, activeDifficulty, record.completedAt) !== null;
                 return (
                   <div
                     key={record.completedAt}
@@ -282,6 +601,14 @@ export default function ScoreBook({ initialSongId, initialDifficulty, onBack }: 
                         <span className="record-time">
                           {formatTime(record.completedAt)}
                         </span>
+                        {hasReplay && (
+                          <button
+                            className="record-replay-btn"
+                            onClick={() => setViewingReplayAt(record.completedAt)}
+                          >
+                            回放
+                          </button>
+                        )}
                       </div>
                       <div className="record-stats">
                         <div className="record-stat">

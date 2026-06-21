@@ -1,4 +1,4 @@
-import type { Song, PlayRecord, ChartDifficulty, BestPlaySummary, ScoreCheckpoint, LiveComparisonState, GameStats, KeyBindings, ButtonLayout, ControlSettings } from "./types";
+import type { Song, PlayRecord, ChartDifficulty, BestPlaySummary, ScoreCheckpoint, LiveComparisonState, GameStats, KeyBindings, ButtonLayout, ControlSettings, ReplayData } from "./types";
 import {
   resourceManager,
   defaultSongs,
@@ -292,6 +292,18 @@ export function resetControlSettings(): void {
 
 export function validateKeyBinding(key: string, currentBindings: KeyBindings, trackIndex: number): { valid: boolean; error?: string } {
   return resourceManager.validateKeyBinding(key, currentBindings, trackIndex);
+}
+
+export function saveReplayData(replay: ReplayData): void {
+  resourceManager.saveReplayData(replay);
+}
+
+export function getReplayData(songId: string, difficulty: ChartDifficulty, completedAt: number): ReplayData | null {
+  return resourceManager.getReplayData(songId, difficulty, completedAt);
+}
+
+export function getReplayDataList(songId: string, difficulty: ChartDifficulty): ReplayData[] {
+  return resourceManager.getReplayDataList(songId, difficulty);
 }
 
 export const tutorialSteps: TutorialStep[] = [

@@ -200,3 +200,68 @@ export interface ControlSettings {
   keyBindings: KeyBindings;
   buttonLayout: ButtonLayout;
 }
+
+export interface ReplayInputEvent {
+  type: "press" | "release";
+  track: number;
+  elapsedMs: number;
+  calibratedElapsedMs: number;
+  calibrationOffsetMs: number;
+  deviceBaselineOffsetMs: number;
+}
+
+export interface ReplayPauseNode {
+  type: "pause" | "resume";
+  elapsedMs: number;
+  timestamp: number;
+}
+
+export interface ReplaySyncEvent {
+  type: "visibility_change" | "low_frame" | "resync";
+  elapsedMs: number;
+  detail?: string;
+}
+
+export interface ReplayJudgeEvent {
+  noteId: number;
+  track: number;
+  noteType: NoteType;
+  phase: "start" | "end";
+  judge: JudgeType;
+  distanceMs: number;
+  elapsedMs: number;
+  calibratedElapsedMs: number;
+}
+
+export interface ReplayData {
+  schemaVersion: number;
+  songId: string;
+  difficulty: ChartDifficulty;
+  inputEvents: ReplayInputEvent[];
+  pauseNodes: ReplayPauseNode[];
+  syncEvents: ReplaySyncEvent[];
+  judgeEvents: ReplayJudgeEvent[];
+  finalStats: GameStats;
+  calibrationAtStart: {
+    value: number;
+    source: CalibrationSource;
+  };
+  completedAt: number;
+}
+
+export interface ReplayVerificationResult {
+  match: boolean;
+  originalStats: GameStats;
+  replayStats: GameStats;
+  differences: {
+    field: string;
+    original: number;
+    replay: number;
+  }[];
+  perNoteMismatches: {
+    noteId: number;
+    original: JudgeType;
+    replay: JudgeType;
+    phase: "start" | "end";
+  }[];
+}

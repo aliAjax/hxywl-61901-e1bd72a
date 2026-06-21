@@ -147,6 +147,10 @@ export class AudioSyncEngine {
     return this.touchCalibrationOffsetMs + this.deviceBaselineOffsetMs;
   }
 
+  getDeviceBaselineOffset(): number {
+    return this.deviceBaselineOffsetMs;
+  }
+
   getState(): SyncState {
     return this.state;
   }
