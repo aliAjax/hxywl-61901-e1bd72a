@@ -4,7 +4,9 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 61901",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

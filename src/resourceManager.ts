@@ -32,11 +32,11 @@ export const CHART_DIFFICULTY_INFO: Record<ChartDifficulty, ChartDifficultyInfo>
   challenge: { level: 3, label: "挑战", color: "#f97316" },
 };
 
-function makeChartKey(songId: string, difficulty: ChartDifficulty): string {
+export function makeChartKey(songId: string, difficulty: ChartDifficulty): string {
   return `${songId}__${difficulty}`;
 }
 
-function parseChartKey(key: string): { songId: string; difficulty: ChartDifficulty } | null {
+export function parseChartKey(key: string): { songId: string; difficulty: ChartDifficulty } | null {
   const parts = key.split("__");
   if (parts.length !== 2) return null;
   const [songId, difficulty] = parts;
@@ -499,7 +499,7 @@ function buildChartForSong(song: Song, difficulty: ChartDifficulty): Chart {
   };
 }
 
-function getCurrentVersion(): ResourceVersion {
+export function getCurrentVersion(): ResourceVersion {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     songsVersion: CURRENT_SONGS_VERSION,
@@ -508,7 +508,7 @@ function getCurrentVersion(): ResourceVersion {
   };
 }
 
-function safeParseJSON<T>(raw: string | null, fallback: T): T {
+export function safeParseJSON<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;
@@ -517,7 +517,7 @@ function safeParseJSON<T>(raw: string | null, fallback: T): T {
   }
 }
 
-function isValidSong(song: unknown): song is Song {
+export function isValidSong(song: unknown): song is Song {
   if (!song || typeof song !== "object") return false;
   const s = song as Record<string, unknown>;
   return (
@@ -534,7 +534,7 @@ function isValidSong(song: unknown): song is Song {
   );
 }
 
-function isValidChart(chart: unknown): chart is Chart {
+export function isValidChart(chart: unknown): chart is Chart {
   if (!chart || typeof chart !== "object") return false;
   const c = chart as Record<string, unknown>;
   return (
@@ -548,7 +548,7 @@ function isValidChart(chart: unknown): chart is Chart {
   );
 }
 
-function isValidPlayRecord(record: unknown): record is PlayRecord {
+export function isValidPlayRecord(record: unknown): record is PlayRecord {
   if (!record || typeof record !== "object") return false;
   const r = record as Record<string, unknown>;
   return (
@@ -563,7 +563,7 @@ function isValidPlayRecord(record: unknown): record is PlayRecord {
   );
 }
 
-function isValidBestPlaySummary(summary: unknown): summary is BestPlaySummary {
+export function isValidBestPlaySummary(summary: unknown): summary is BestPlaySummary {
   if (!summary || typeof summary !== "object") return false;
   const s = summary as Record<string, unknown>;
   return (
@@ -582,6 +582,16 @@ function isValidBestPlaySummary(summary: unknown): summary is BestPlaySummary {
     typeof s.longMissCount === "number" &&
     Array.isArray(s.checkpoints) &&
     typeof s.completedAt === "number"
+  );
+}
+
+export function isVersionCompatible(stored: ResourceVersion | null): boolean {
+  if (!stored) return false;
+  return (
+    stored.schemaVersion === CURRENT_SCHEMA_VERSION &&
+    stored.songsVersion === CURRENT_SONGS_VERSION &&
+    stored.chartsVersion === CURRENT_CHARTS_VERSION &&
+    stored.scoresVersion === CURRENT_SCORES_VERSION
   );
 }
 
@@ -620,16 +630,6 @@ class ResourceManager {
     this.memoryCache.version = version;
   }
 
-  private isVersionCompatible(stored: ResourceVersion | null): boolean {
-    if (!stored) return false;
-    return (
-      stored.schemaVersion === CURRENT_SCHEMA_VERSION &&
-      stored.songsVersion === CURRENT_SONGS_VERSION &&
-      stored.chartsVersion === CURRENT_CHARTS_VERSION &&
-      stored.scoresVersion === CURRENT_SCORES_VERSION
-    );
-  }
-
   checkIntegrity(): ResourceIntegrityReport {
     const report: ResourceIntegrityReport = {
       ok: true,
@@ -642,7 +642,7 @@ class ResourceManager {
     };
 
     const storedVersion = this.readVersion();
-    if (!this.isVersionCompatible(storedVersion)) {
+    if (!isVersionCompatible(storedVersion)) {
       report.ok = false;
       report.versionMismatch = true;
     }
