@@ -471,6 +471,7 @@ export default function GamePlay({ song, difficulty, onBack, onOpenScorebook, pr
     activePointersRef.current.clear();
     const cal = getEffectiveCalibration(song.id);
     recorderRef.current = new InputRecorder(song.id, difficulty, cal.value, cal.source);
+    recorderRef.current.setChartSnapshot(chart);
     recorderHadPauseRef.current = false;
     playerRef.current?.start();
   }

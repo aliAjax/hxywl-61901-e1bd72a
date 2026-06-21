@@ -1,5 +1,6 @@
 import type {
   ReplayData,
+  ReplayChartSnapshot,
   ReplayInputEvent,
   ReplayPauseNode,
   ReplaySyncEvent,
@@ -9,9 +10,10 @@ import type {
   ChartDifficulty,
   JudgeType,
   NoteType,
+  Chart,
 } from "./types";
 
-const REPLAY_SCHEMA_VERSION = 1;
+const REPLAY_SCHEMA_VERSION = 2;
 
 export class InputRecorder {
   private songId: string;
@@ -21,6 +23,7 @@ export class InputRecorder {
   private syncEvents: ReplaySyncEvent[] = [];
   private judgeEvents: ReplayJudgeEvent[] = [];
   private calibrationAtStart: { value: number; source: CalibrationSource };
+  private chartSnapshot: ReplayChartSnapshot | null = null;
   private prevDiagLowFrame = 0;
   private prevDiagResync = 0;
   private prevDiagVisibility = 0;
@@ -34,6 +37,23 @@ export class InputRecorder {
     this.songId = songId;
     this.difficulty = difficulty;
     this.calibrationAtStart = { value: calibrationValue, source: calibrationSource };
+  }
+
+  setChartSnapshot(chart: Chart) {
+    this.chartSnapshot = {
+      songId: chart.songId,
+      difficulty: chart.difficulty,
+      totalNotes: chart.totalNotes,
+      totalTapNotes: chart.totalTapNotes,
+      totalLongNotes: chart.totalLongNotes,
+      notes: chart.notes.map((n) => ({
+        id: n.id,
+        time: n.time,
+        track: n.track,
+        type: n.type,
+        duration: n.duration,
+      })),
+    };
   }
 
   recordInput(
@@ -109,7 +129,7 @@ export class InputRecorder {
   }
 
   buildReplayData(finalStats: GameStats, completedAt: number): ReplayData {
-    return {
+    const data: ReplayData = {
       schemaVersion: REPLAY_SCHEMA_VERSION,
       songId: this.songId,
       difficulty: this.difficulty,
@@ -121,6 +141,10 @@ export class InputRecorder {
       calibrationAtStart: { ...this.calibrationAtStart },
       completedAt,
     };
+    if (this.chartSnapshot) {
+      data.chartSnapshot = { ...this.chartSnapshot, notes: [...this.chartSnapshot.notes] };
+    }
+    return data;
   }
 
   reset() {

@@ -5221,3 +5221,131 @@ button {
   font-size: 16px;
   color: #e2e8f0;
 }
+
+.marker-note-tap {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid;
+  background: transparent;
+  top: 10px;
+  opacity: 0.75;
+  z-index: 0;
+}
+
+.replay-timeline-note-long {
+  position: absolute;
+  height: 18px;
+  top: 5px;
+  border: 1px dashed;
+  border-radius: 3px;
+  z-index: 0;
+}
+
+.replay-timeline-note-cap {
+  position: absolute;
+  width: 3px;
+  height: 100%;
+  top: 0;
+  border-radius: 1px;
+}
+
+.note-cap-start {
+  left: 0;
+}
+
+.note-cap-end {
+  right: 0;
+}
+
+.replay-recalibration {
+  margin-top: 16px;
+}
+
+.recalibration-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.recalibration-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.recalibration-label {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.recalibration-slider {
+  flex: 1;
+  accent-color: #8b5cf6;
+  height: 20px;
+}
+
+.recalibration-input {
+  width: 64px;
+  padding: 4px 8px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.recalibration-input:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.6);
+}
+
+.recalibration-unit {
+  font-size: 12px;
+  color: #64748b;
+  width: 20px;
+}
+
+.recalibration-presets {
+  display: flex;
+  gap: 6px;
+  margin-left: 70px;
+}
+
+.recalibration-preset {
+  padding: 3px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+  background: rgba(30, 41, 59, 0.5);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.recalibration-preset:hover {
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.recalibration-preset.active {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #c4b5fd;
+}
+
+.recalibration-preset.original {
+  border-style: dashed;
+}
+
+.recalibration-hint {
+  font-size: 11px;
+  color: #64748b;
+  margin-left: 70px;
+}

@@ -233,6 +233,15 @@ export interface ReplayJudgeEvent {
   calibratedElapsedMs: number;
 }
 
+export interface ReplayChartSnapshot {
+  songId: string;
+  difficulty: ChartDifficulty;
+  totalNotes: number;
+  totalTapNotes: number;
+  totalLongNotes: number;
+  notes: ChartNote[];
+}
+
 export interface ReplayData {
   schemaVersion: number;
   songId: string;
@@ -246,6 +255,7 @@ export interface ReplayData {
     value: number;
     source: CalibrationSource;
   };
+  chartSnapshot?: ReplayChartSnapshot;
   completedAt: number;
 }
 
@@ -263,5 +273,24 @@ export interface ReplayVerificationResult {
     original: JudgeType;
     replay: JudgeType;
     phase: "start" | "end";
+  }[];
+}
+
+export interface ReplayRecalibrationResult {
+  originalCalibrationMs: number;
+  newCalibrationMs: number;
+  originalStats: GameStats;
+  newStats: GameStats;
+  deltaScore: number;
+  deltaPerfect: number;
+  deltaGood: number;
+  deltaMiss: number;
+  perNoteChanges: {
+    noteId: number;
+    phase: "start" | "end";
+    originalJudge: JudgeType;
+    newJudge: JudgeType;
+    originalDistanceMs: number;
+    newDistanceMs: number;
   }[];
 }

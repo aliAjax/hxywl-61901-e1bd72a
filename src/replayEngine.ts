@@ -7,6 +7,7 @@ import type {
   ReplayData,
   ReplayJudgeEvent,
   ReplayVerificationResult,
+  ReplayRecalibrationResult,
 } from "./types";
 import {
   PERFECT_WINDOW_MS,
@@ -15,6 +16,22 @@ import {
   LONG_NOTE_END_PERFECT_WINDOW_MS,
   LONG_NOTE_END_GOOD_WINDOW_MS,
 } from "./chartPlayer";
+
+function resolveChart(chart: Chart, replayData: ReplayData): Chart {
+  if (replayData.chartSnapshot) {
+    return {
+      songId: replayData.chartSnapshot.songId,
+      difficulty: replayData.chartSnapshot.difficulty,
+      totalNotes: replayData.chartSnapshot.totalNotes,
+      totalTapNotes: replayData.chartSnapshot.totalTapNotes,
+      totalLongNotes: replayData.chartSnapshot.totalLongNotes,
+      chorusCount: 0,
+      notes: replayData.chartSnapshot.notes,
+      audioBeats: [],
+    };
+  }
+  return chart;
+}
 
 interface ReplayNote {
   id: number;
@@ -53,10 +70,19 @@ export interface ReplayResult {
   judgeEvents: ReplayJudgeEvent[];
 }
 
-export function runReplay(chart: Chart, replayData: ReplayData): ReplayResult {
+export interface ReplayRunOptions {
+  calibrationOverrideMs?: number;
+}
+
+export function runReplay(chart: Chart, replayData: ReplayData, options: ReplayRunOptions = {}): ReplayResult {
+  const effectiveChart = resolveChart(chart, replayData);
+  const calibrationDelta = options.calibrationOverrideMs != null
+    ? options.calibrationOverrideMs - replayData.calibrationAtStart.value
+    : 0;
+
   const stats = emptyStats();
   const judgeEvents: ReplayJudgeEvent[] = [];
-  const notes: ReplayNote[] = chart.notes.map((n) => ({
+  const notes: ReplayNote[] = effectiveChart.notes.map((n) => ({
     id: n.id,
     track: n.track,
     targetTime: n.time,
@@ -319,9 +345,16 @@ export function runReplay(chart: Chart, replayData: ReplayData): ReplayResult {
     trackHeldNoteId.set(track, null);
   }
 
+  function getEffectiveCalibrated(e: { elapsedMs: number; calibratedElapsedMs: number }): number {
+    if (options.calibrationOverrideMs != null) {
+      return e.elapsedMs + options.calibrationOverrideMs;
+    }
+    return e.calibratedElapsedMs;
+  }
+
   const allEvents = replayData.inputEvents.map((e) => ({
     kind: "input" as const,
-    idx: e.elapsedMs,
+    idx: getEffectiveCalibrated(e),
     event: e,
   }));
 
@@ -330,20 +363,21 @@ export function runReplay(chart: Chart, replayData: ReplayData): ReplayResult {
   for (const item of sorted) {
     if (item.kind === "input") {
       const e = item.event;
-      processAutoMissAt(e.calibratedElapsedMs, e.elapsedMs);
+      const effCal = getEffectiveCalibrated(e);
+      processAutoMissAt(effCal, e.elapsedMs);
       if (e.type === "press") {
-        handlePress(e.track, e.calibratedElapsedMs, e.elapsedMs);
+        handlePress(e.track, effCal, e.elapsedMs);
       } else {
-        handleRelease(e.track, e.calibratedElapsedMs, e.elapsedMs);
+        handleRelease(e.track, effCal, e.elapsedMs);
       }
     }
   }
 
   const maxCalibrated = sorted.length > 0
-    ? Math.max(...sorted.map((s) => s.event.calibratedElapsedMs))
+    ? Math.max(...sorted.map((s) => getEffectiveCalibrated(s.event)))
     : 0;
-  const totalDurationMs = (chart.notes.length > 0
-    ? Math.max(...chart.notes.map((n) => {
+  const totalDurationMs = (effectiveChart.notes.length > 0
+    ? Math.max(...effectiveChart.notes.map((n) => {
         if (n.type === "long" && n.duration) return n.time + n.duration;
         return n.time;
       }))
@@ -409,5 +443,58 @@ export function verifyReplay(
     replayStats: { ...replay },
     differences,
     perNoteMismatches,
+  };
+}
+
+export function recalibrateReplay(
+  chart: Chart,
+  replayData: ReplayData,
+  newCalibrationMs: number
+): ReplayRecalibrationResult {
+  const originalResult = runReplay(chart, replayData);
+  const newResult = runReplay(chart, replayData, { calibrationOverrideMs: newCalibrationMs });
+
+  const originalMap = new Map<string, ReplayJudgeEvent>();
+  for (const je of originalResult.judgeEvents) {
+    if (je.noteId < 0) continue;
+    originalMap.set(`${je.noteId}:${je.phase}`, je);
+  }
+
+  const newMap = new Map<string, ReplayJudgeEvent>();
+  for (const je of newResult.judgeEvents) {
+    if (je.noteId < 0) continue;
+    newMap.set(`${je.noteId}:${je.phase}`, je);
+  }
+
+  const perNoteChanges: ReplayRecalibrationResult["perNoteChanges"] = [];
+  const allKeys = new Set([...originalMap.keys(), ...newMap.keys()]);
+  for (const key of allKeys) {
+    const orig = originalMap.get(key);
+    const nw = newMap.get(key);
+    const [noteIdStr, phase] = key.split(":");
+    const noteId = parseInt(noteIdStr, 10);
+    if (orig?.judge !== nw?.judge) {
+      perNoteChanges.push({
+        noteId,
+        phase: phase as "start" | "end",
+        originalJudge: orig?.judge ?? null,
+        newJudge: nw?.judge ?? null,
+        originalDistanceMs: orig?.distanceMs ?? 0,
+        newDistanceMs: nw?.distanceMs ?? 0,
+      });
+    }
+  }
+  perNoteChanges.sort((a, b) => a.noteId - b.noteId);
+
+  return {
+    originalCalibrationMs: replayData.calibrationAtStart.value,
+    newCalibrationMs,
+    originalStats: originalResult.stats,
+    newStats: newResult.stats,
+    deltaScore: newResult.stats.score - originalResult.stats.score,
+    deltaPerfect: newResult.stats.perfectCount - originalResult.stats.perfectCount,
+    deltaGood: newResult.stats.goodCount - originalResult.stats.goodCount,
+    deltaMiss: newResult.stats.missCount - originalResult.stats.missCount,
+    perNoteChanges,
   };
 }
